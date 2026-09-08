@@ -1,0 +1,10 @@
+.venv/
+.local/
+results/
+build/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+log.sparta
+*.out
+*.err

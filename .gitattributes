@@ -1,0 +1,9 @@
+# Normalize every text file to LF in the repository and in the working tree.
+# WSL-side scripts strip CR anyway (tr -d '\r'), Windows editors handle LF, and
+# the pre-2026-09-04 tree was a 37 CRLF / 87 LF mix that cost debugging cycles.
+* text=auto eol=lf
+*.png binary
+*.svg text eol=lf
+*.pdf binary
+*.gz binary
+*.zip binary
