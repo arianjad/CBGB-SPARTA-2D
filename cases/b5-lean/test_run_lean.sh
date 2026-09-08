@@ -3,7 +3,7 @@
 # each case invokes the tracked runner with scratch roots supplied through its
 # documented environment, then uses an executable fake solver.
 #
-# Run only under an allocated source-validation slot:
+# Run:
 #   bash cases/b5-lean/test_run_lean.sh
 set -euo pipefail
 
@@ -42,6 +42,14 @@ check() {
 cat > "$FAKE" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "${FAKE_LOG:?}"
+if [ -n "${FAKE_BARRIER:-}" ]; then
+  touch "$FAKE_BARRIER/$(basename "$PWD")"
+  for attempt in $(seq 1 100); do
+    [ "$(find "$FAKE_BARRIER" -type f | wc -l)" -ge 2 ] && break
+    sleep 0.05
+  done
+  [ "$(find "$FAKE_BARRIER" -type f | wc -l)" -ge 2 ] || exit 99
+fi
 exit "${FAKE_RC:-0}"
 EOF
 chmod +x "$FAKE"
@@ -69,10 +77,8 @@ if [ "\${GIT_MODE:-real}" = blank ]; then exit 0; fi
 exec "$REAL_GIT" "\$@"
 EOF
   chmod +x "$FAKEBIN/git"
-  # pgrep is a WSL production dependency but absent from this Git-Bash-only
-  # fixture.  Model the known-idle preflight instead of treating that host
-  # difference as a runner failure.
-  printf '#!/usr/bin/env bash\nexit 1\n' > "$FAKEBIN/pgrep"
+  # Another visible SPARTA process must not veto an independent run.
+  printf '#!/usr/bin/env bash\necho "123 spa_mpi"\nexit 0\n' > "$FAKEBIN/pgrep"
   chmod +x "$FAKEBIN/pgrep"
   : > "$TMP/fake.log"
 }
@@ -138,6 +144,17 @@ assert by_name["wall.surf"]["source_sha256"] != by_name["wall.surf"]["staged_sha
 assert any(x["path"] == "run.log" for x in m["outputs"])
 assert not set(by_name).intersection(x["path"] for x in m["outputs"])
 PY
+
+# Both independent solvers must be active before either can finish.
+fresh; make_git_repo; mkdir "$TMP/barrier"
+export FAKE_BARRIER="$TMP/barrier"
+run sweep-a deck.in wall.surf & first=$!
+run sweep-b deck.in wall.surf & second=$!
+check wait "$first"
+check wait "$second"
+unset FAKE_BARRIER
+check test "$(cat "$RUNROOT/sweep-a/rc.sentinel")" = 0
+check test "$(cat "$RUNROOT/sweep-b/rc.sentinel")" = 0
 
 # Dirty source state is recorded rather than silently attributed to HEAD.
 fresh; make_git_repo; printf 'untracked\n' > "$REPO/local-note.txt"

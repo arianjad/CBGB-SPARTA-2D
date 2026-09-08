@@ -384,8 +384,7 @@ Accepts as input the velocity of a particle v, the mean velocity of a buffer gas
 # propose u ~ Maxwell(T), accept with probability |w0-u|/gmax. w0 is the
 # particle velocity in the gas mean-flow frame; gmax = |w0| + 8 sigma_c bounds
 # the relative speed (acceptance tail beyond it ~1e-13). Statistically exact
-# at any relative speed; validated < 1% against a 2e7-sample reference MC
-# Use direct flux-weighted sampling for the exact sampler.
+# at any relative speed up to the stated proposal-tail approximation.
 @inline function exact_partner(w0, T)
     s = sqrt(kB*T/MASS_BUFFER_GAS)
     gmax = LinearAlgebra.norm(w0) + 8.0*s

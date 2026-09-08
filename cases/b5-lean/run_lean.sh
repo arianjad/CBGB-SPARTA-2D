@@ -54,9 +54,6 @@ if ! mkdir -p "$run_root" "$log_root"; then echo "REFUSE: cannot create run/log 
 say() { echo "$(date -u +%FT%TZ) $sub $*" | tee -a "$log_root/run_lean.log" >&2; }
 
 if [ -e "$d" ]; then say "REFUSE: $d already exists"; exit 3; fi
-if pgrep -x 'spa_.*' > /dev/null; then
-  say "REFUSE: a SPARTA job is running: $(pgrep -ax 'spa_.*' | head -1 | cut -c1-120)"; exit 4
-fi
 if [ ! -x "$exe" ]; then say "REFUSE: solver is not executable: $exe"; exit 5; fi
 if ! command -v "$python_cmd" >/dev/null 2>&1; then say "REFUSE: provenance writer is unavailable: $python_cmd"; exit 5; fi
 if [ "$np" -gt 1 ] && ! command -v mpirun >/dev/null 2>&1; then say "REFUSE: mpirun is required when NPROC > 1"; exit 5; fi
