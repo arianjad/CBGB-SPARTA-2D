@@ -222,4 +222,4 @@ def resolved_dt(run_dir: str | Path, explicit_dt: float | None = None) -> float:
 
 
 def write_frame(frame: Frame, path: str | Path) -> None:
-    Path(path).write_text(frame.raw, encoding="utf-8")
+    Path(path).write_bytes(frame.raw.encode("utf-8"))

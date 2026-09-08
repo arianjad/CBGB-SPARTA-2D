@@ -8,7 +8,7 @@ import numpy as np
 import field2tracer as f2t
 import plot_fields_b5 as pfb
 import plot_trajectories as pt
-from field_io import FieldFormatError, read_complete_frames, resolved_dt, select_frame
+from field_io import FieldFormatError, read_complete_frames, resolved_dt, select_frame, write_frame
 
 
 COLUMNS = "id xc yc xlo ylo xhi yhi nrho u v temp"
@@ -70,6 +70,14 @@ def main():
         assert prov["source_observed_status"] == "running"
         assert prov["source_dt_s"] == 2e-7
         assert prov["ignored_incomplete_tail"]
+
+        crlf = root / "crlf.grid"
+        original = frame(20_000, ROWS_FLOW).replace("\n", "\r\n").encode()
+        crlf.write_bytes(original)
+        copied = root / "crlf-copy.grid"
+        write_frame(read_complete_frames(crlf).frames[0], copied)
+        assert copied.read_bytes() == original
+        assert read_complete_frames(copied).frames[0].timestep == 20_000
 
         averaged = pfb.average_tail(grid, frac=0, until_ms=5.0)
         assert averaged["steps"] == [20_000]
