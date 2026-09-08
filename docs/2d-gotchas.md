@@ -145,6 +145,9 @@ statistical/convergence threshold.
 
 ## Reading the analysis
 
+See [Controlling numerical accuracy](accuracy.md) for particle-count,
+mesh/timestep, and sampling studies when a quantitative error target matters.
+
 `exit.json` reports escape through the geometry-derived exit plane.
 `common.json` reports first crossings of the configured observation plane and
 applies explicit radius and angle cuts. For comparisons, keep the observation

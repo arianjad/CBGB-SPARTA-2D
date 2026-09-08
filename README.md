@@ -223,6 +223,11 @@ field; it excludes helium-field noise and numerical/model uncertainty.
 
 ## Changing the simulation
 
+For a target tighter than about 5%, see [Controlling numerical accuracy](docs/accuracy.md).
+It explains mesh refinement and adaptive grids, helium `FNUM`, timestep and
+averaging windows, molecule sample counts, and an observable-based convergence
+study. The tutorial does not claim a universal 5% accuracy level.
+
 The helium launcher accepts `MDOT` (kg/s), `FILLN` (m^-3), `FNUM`, `DT` (s),
 `STEPS`, `RANKS`, and `SEED` through environment variables. Changing the flow
 does not automatically change the fill. Recalculate it with the aperture-law
