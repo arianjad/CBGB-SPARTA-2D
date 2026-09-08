@@ -14,10 +14,11 @@ collision cross section, temperature, and birth distribution are configurable.
 maps, molecular extraction/speed/angle summaries, and trajectory figures.
 See [Gotchas](docs/2d-gotchas.md) when something looks wrong.
 
-![Twenty recorded BaF paths over the helium flow field](docs/images/trajectories.png)
+![Two signed Cartesian projections of twenty recorded 3D BaF paths](docs/images/trajectories.png)
 
 Example output from the tutorial: these first 20 molecules all hit a wall.
-The full 1,000-molecule run is used for the extraction statistics.
+Both panels show the same 3D paths, projected onto the axial–x and axial–y
+planes. The full 1,000-molecule run is used for the extraction statistics.
 
 ## 1. Install and clone
 
@@ -201,6 +202,22 @@ N=1000 THREADS=4 bash tools/run_2d_standalone.sh \
 
 Open `results/molecules/first-baf/figures/` for helium maps, molecule phase
 space, wall-hit/source maps, and (when requested) trajectory figures.
+
+### Reading the trajectory views
+
+`traj_overlay.png` shows the same recorded Cartesian paths in two signed
+projections, `(z, x)` and `(z, y)`; `traj_aperture.png` zooms into the exit.
+Here `z` is axial and `x, y` are transverse. Unlike a `(z, r)` plot with
+`r = sqrt(x² + y²)`, these views preserve crossings of either projected
+centerline. Crossing one centerline does not necessarily mean reaching the
+3D axis, which requires both transverse coordinates to vanish.
+
+The grey helium background and wall outline show a central meridional slice.
+An off-plane molecule samples helium at its full radius, so the background
+under its projected point need not be its local field. Terminal markers are
+estimated: the plotter clips the last leg using the existing `(z, r)` wall/domain
+test and applies that leg fraction to the Cartesian segment. This is not an
+independent 3D wall-intersection calculation.
 
 | Output in the molecule directory | What it contains |
 |---|---|

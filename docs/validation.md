@@ -26,6 +26,13 @@ the latter produced 20 paths and five figures. Its reported sampler warnings
 come from initialization of a table that exact-mode collisions do not use;
 see [Gotchas](2d-gotchas.md#molecule-source).
 
+The README trajectory preview was regenerated from the retained tutorial paths
+as two signed Cartesian projections, without rerunning the simulation or
+changing its recorded results. The overview and exit zoom were visually
+inspected. Regression checks cover signed centerline crossings, both transverse
+coordinates, terminal clipping fractions, wall fates, zero-collision paths,
+and extracted-only figures. The portable suite passed after this plotting update.
+
 ## Portable checks
 
 From the repository root after installation:

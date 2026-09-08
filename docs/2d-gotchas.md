@@ -64,6 +64,15 @@ tracer uses Cartesian coordinates internally; the
 [field converter](../tools/field2tracer.py) performs the mapping. Do not swap
 columns or hand-edit `DS2FF.DAT`.
 
+Trajectory figures show two projections of the same Cartesian 3D path:
+axial `z` versus signed transverse `x`, and `z` versus signed `y`. A crossing
+of one projected centerline is not necessarily a crossing of the 3D axis.
+The helium background and walls are meridional slices, not the field sampled
+along an off-plane path. Final markers use the existing radial-plane clipping
+fraction interpolated onto the Cartesian terminal leg; they are estimated
+terminations, not independently calculated 3D wall contacts. See the
+[trajectory view guide](../README.md#reading-the-trajectory-views).
+
 Edit geometry constants in `gen_b5.py`, regenerate the surfaces, and inspect
 `git diff`. Do not edit generated `.surf` files independently. The generator
 checks that walls and diagnostic stations avoid grid faces at every refinement

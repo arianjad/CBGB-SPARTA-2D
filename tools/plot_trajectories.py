@@ -18,13 +18,17 @@ the birthplace-to-extraction correlation visible; the default fate colouring
 (blue extracted / vermillion wall / grey radial) is unchanged.
 
 Geometry, the domain box and the extraction plane all come from the .surfs the
-tracer itself was given, so the figure cannot silently disagree with the run.
-The greyscale flow background comes from the frozen field beside the geometry.
+tracer itself was given.  Geometry is shown only as a central meridional wall
+outline; the figure does not perform a three-dimensional wall-intersection
+calculation.  The greyscale flow background comes from the frozen field beside
+the geometry.
 For older outputs without that file, provenance selects its recorded source
 timestep exactly. With neither source available, walls and paths are drawn alone.
 
-Coordinates: tracer z is the SPARTA axial coordinate, and the tracer's
-transverse pair (x, y) gives the SPARTA radius r = sqrt(x^2 + y^2).
+Coordinates: tracer z is the SPARTA axial coordinate and the tracer records
+both signed transverse coordinates (x, y).  The two panels show the actual
+3D paths projected into the z-x and z-y planes.  Their helium backgrounds are
+central meridional slices only, not gas sampled along an off-plane path.
 """
 import argparse
 import json
@@ -53,7 +57,7 @@ CMAP = ListedColormap(plt.get_cmap("Greys")(np.linspace(0.0, 0.62, 256)))
 
 
 def read_rows(outfile):
-    """({pid: [(z, r), ...] leg starts}, {pid: endpoint row}).
+    """({pid: [(z, x, y), ...] leg starts}, {pid: endpoint row}).
 
     `--trajprint` emits one row per leg in the ordinary 12-column format with a
     NEGATIVE index -- but the print sits in the `else` arm of propagate's loop,
@@ -75,12 +79,9 @@ def read_rows(outfile):
                 continue
             a = [float(t) for t in v[1:]]
             if idx < 0:
-                legs.setdefault(-idx, []).append((a[2], np.hypot(a[0], a[1])))
+                legs.setdefault(-idx, []).append((a[2], a[0], a[1]))
             else:
                 ends[idx] = a
-    if not legs:
-        sys.exit("no --trajprint rows in %s: rerun the tracer with "
-                 "--trajprint N (it is a particle count, not a flag)" % outfile)
     return legs, ends
 
 
@@ -88,7 +89,12 @@ def build(outfile, surfs):
     """Clipped polylines and fates, keyed by particle id."""
     seg, xap, bounds = read_surfs(surfs)
     legs, ends = read_rows(outfile)
-    pids = sorted(p for p in legs if p in ends)
+    # A particle that has no collisions reaches its terminal row without a
+    # negative hook row.  It is a complete one-leg ballistic track.  A
+    # nonzero-collision endpoint without hooks lacks its earlier path and is
+    # deliberately not invented here.
+    pids = sorted(set(p for p in legs if p in ends) |
+                  {p for p, a in ends.items() if int(a[9]) == 0})
     missing = sorted(p for p in legs if p not in ends)
     if missing:
         print("WARNING: %d of %d traced particles have no endpoint row (%s) -- "
@@ -97,18 +103,31 @@ def build(outfile, surfs):
               % (len(missing), len(legs),
                  ",".join(str(p) for p in missing[:8])), file=sys.stderr)
     if not pids:
-        sys.exit("no traced particle has an endpoint row: rerun with --saveall 1")
+        sys.exit("no usable trajectory has an endpoint row: rerun the tracer "
+                 "with --trajprint N and --saveall 1")
 
     # The terminating leg: start from the endpoint row, and its stored end is
     # the UNCLIPPED free-path endpoint (final radii of 250-300 mm show up on a
     # 19.9 mm domain), so it has to be clipped to the first crossing.
-    p1 = np.array([[ends[p][2], np.hypot(ends[p][0], ends[p][1])] for p in pids])
-    p2 = np.array([[ends[p][5], np.hypot(ends[p][3], ends[p][4])] for p in pids])
+    p1xyz = np.array([[ends[p][2], ends[p][0], ends[p][1]] for p in pids])
+    p2xyz = np.array([[ends[p][5], ends[p][3], ends[p][4]] for p in pids])
+    p1 = np.column_stack([p1xyz[:, 0], np.hypot(p1xyz[:, 1], p1xyz[:, 2])])
+    p2 = np.column_stack([p2xyz[:, 0], np.hypot(p2xyz[:, 1], p2xyz[:, 2])])
     hit, code = clip_legs(p1, p2, seg, bounds)
+
+    # Fates intentionally remain the tracer analyzer's linear (z, r) model.
+    # Use its contact fraction on the original Cartesian leg only for the
+    # visible terminal marker; this is not a three-dimensional wall solve.
+    d_zr = p2 - p1
+    with np.errstate(divide="ignore", invalid="ignore"):
+        frac = np.sum((hit - p1) * d_zr, axis=1) / np.sum(d_zr * d_zr, axis=1)
+    frac = np.clip(np.nan_to_num(frac, nan=1.0), 0.0, 1.0)
+    terminal = p1xyz + frac[:, None] * (p2xyz - p1xyz)
 
     tracks, fates, coll = {}, {}, {}
     for k, p in enumerate(pids):
-        tracks[p] = np.vstack([np.array(legs[p]), p1[k], hit[k]])
+        tracks[p] = np.vstack([np.asarray(legs.get(p, ()), float).reshape(-1, 3),
+                               p1xyz[k], terminal[k]])
         coll[p] = int(ends[p][9])
         if hit[k, 0] > xap:
             fates[p] = "extracted"
@@ -164,25 +183,34 @@ def background(ax, surfs):
     return pc
 
 
-def draw(ax, tracks, colors, seg, surfs, xlim, ylim):
+def draw(ax, tracks, colors, seg, surfs, xlim, ylim, transverse_index,
+         slice_label):
     pc = background(ax, surfs)
-    # Walls come from the tracer's OWN geometry, mirrored about the axis, so
-    # the drawing cannot disagree with what the particles collided against.
+    ax.axhline(0.0, color="#444444", lw=0.7, ls="--", alpha=0.45, zorder=2)
+    # The mirrored outline is a valid axisymmetric envelope in either central
+    # meridional slice.  It is not a rendered off-plane wall intersection.
     for x1, y1, x2, y2 in seg:
         for s in (1, -1):
             ax.plot([x1, x2], [s * y1, s * y2], color="k", lw=1.4,
                     solid_capstyle="butt", zorder=3)
-    for p, xy in tracks.items():
+    for p, xyz in tracks.items():
         c = colors[p]
-        ax.plot(xy[:, 0], xy[:, 1], color=c, lw=1.0, alpha=0.55, zorder=4)
-        ax.plot(xy[0, 0], xy[0, 1], "o", ms=5, mfc="white", mec=c, mew=1.2,
+        ax.plot(xyz[:, 0], xyz[:, transverse_index], color=c, lw=1.0,
+                alpha=0.55, zorder=4)
+        ax.plot(xyz[0, 0], xyz[0, transverse_index], "o", ms=5, mfc="white", mec=c, mew=1.2,
                 zorder=6)
-        ax.plot(xy[-1, 0], xy[-1, 1], "x", ms=6, color=c, mew=1.6, zorder=6)
+        ax.plot(xyz[-1, 0], xyz[-1, transverse_index], "x", ms=6, color=c,
+                mew=1.6, zorder=6)
     ax.set_xlim(*xlim)
     ax.set_ylim(*ylim)
     ax.set_aspect("equal")
     ax.set_xlabel("axial position z (m)")
-    ax.set_ylabel("radial position r (m)")
+    ax.set_ylabel("signed transverse %s (m)" %
+                  ("x" if transverse_index == 1 else "y"))
+    ax.text(0.015, 0.985, slice_label, transform=ax.transAxes, va="top",
+            ha="left", fontsize=7, color="#333333",
+            bbox={"facecolor": "white", "edgecolor": "none", "alpha": 0.72,
+                  "pad": 1.5})
     return pc
 
 
@@ -199,6 +227,16 @@ def legend_handles(fates):
     return h, len(h), n
 
 
+def marker_handles():
+    """Legend entries for markers whose meaning is independent of fate."""
+    return [
+        Line2D([], [], marker="o", ms=5, mfc="white", mec="#333333",
+               mew=1.2, linestyle="none", label="birth"),
+        Line2D([], [], marker="x", ms=6, color="#333333", mew=1.6,
+               linestyle="none", label="estimated termination (z-r clipping)"),
+    ]
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -209,8 +247,9 @@ def main(argv=None):
                     help="subtitle text (default: the run's file name)")
     ap.add_argument("--zoom", nargs=4, type=float, default=None,
                     metavar=("ZLO", "ZHI", "RLO", "RHI"),
-                    help="second panel window (default: auto, around the "
-                         "extraction plane)")
+                    help="second-panel z and signed transverse-coordinate "
+                         "window, applied to both projections (default: auto, "
+                         "around the extraction plane)")
     ap.add_argument("--extracted-only", action="store_true",
                     help="drop every trajectory that did not reach the "
                          "extraction plane and colour the survivors by their "
@@ -220,17 +259,18 @@ def main(argv=None):
     tracks, fates, coll, seg, xap, bounds = build(a.outfile, a.surfs)
     n_traced = len(tracks)
     if a.extracted_only:
-        tracks = {p: xy for p, xy in tracks.items() if fates[p] == "extracted"}
+        tracks = {p: xyz for p, xyz in tracks.items() if fates[p] == "extracted"}
         if not tracks:
             sys.exit("no traced particle was extracted: trace more particles "
                      "(--trajprint N with N >~ 20/extraction fraction)")
-    handles, n_fate, n = legend_handles(fates)
+    handles, _, n = legend_handles(fates)
+    handles += marker_handles()
     ncoll = [coll[p] for p in tracks]
     label = a.label or Path(a.outfile).stem
     if a.extracted_only:
         # tracks[p][0] is the first leg's START, i.e. the birthplace itself --
         # the same point the spawn marker is drawn at -- so no spawn.csv join.
-        r0 = {p: xy[0, 1] for p, xy in tracks.items()}
+        r0 = {p: np.hypot(xyz[0, 1], xyz[0, 2]) for p, xyz in tracks.items()}
         rnorm = plt.Normalize(min(r0.values()), max(r0.values()))
         sm = plt.cm.ScalarMappable(norm=rnorm, cmap="viridis")
         colors = {p: sm.to_rgba(v) for p, v in r0.items()}
@@ -251,21 +291,27 @@ def main(argv=None):
     rmax = bounds[1, 1]
     written = []
 
-    fig, ax = plt.subplots(figsize=(12, 3.6), constrained_layout=True)
-    pc = draw(ax, tracks, colors, seg, a.surfs,
-              (bounds[0, 0], bounds[0, 1]), (-rmax, rmax))
+    fig, axes = plt.subplots(1, 2, figsize=(13, 4.6), constrained_layout=True,
+                             sharex=True, sharey=True)
+    pc = draw(axes[0], tracks, colors, seg, a.surfs,
+              (bounds[0, 0], bounds[0, 1]), (-rmax, rmax), 1,
+              "He slice y = 0\nwall: meridional outline")
+    draw(axes[1], tracks, colors, seg, a.surfs,
+         (bounds[0, 0], bounds[0, 1]), (-rmax, rmax), 2,
+         "He slice x = 0\nwall: meridional outline")
     if pc is not None:
-        fig.colorbar(pc, ax=ax, label="He flow speed |v| (m/s)", pad=0.01,
-                     fraction=0.03)
+        fig.colorbar(pc, ax=axes, label="He flow speed |v| (m/s)", pad=0.01,
+                     fraction=0.03, shrink=0.60)
     if sm is None:
-        ax.legend(handles=handles, loc="lower left", fontsize=8, ncol=2,
-                  framealpha=0.9)
-        title = "Tracer trajectories in the simulated He flow\n"
+        axes[0].legend(handles=handles, loc="lower left", fontsize=8, ncol=1,
+                       framealpha=0.9)
     else:
-        fig.colorbar(sm, ax=ax, label="birth radius $r_0$ (m)", pad=0.01,
-                     fraction=0.03)
-        title = "Extracted tracer trajectories, coloured by birth radius\n"
-    ax.set_title(title + sub, fontsize=10)
+        fig.colorbar(sm, ax=axes, label="birth radius $r_0$ (m)", pad=0.01,
+                     fraction=0.03, shrink=0.60)
+        axes[0].legend(handles=handles[-2:], loc="lower left", fontsize=8,
+                       framealpha=0.9)
+    title = "3D trajectories: signed Cartesian projections\n"
+    fig.suptitle(title + sub, fontsize=10)
     p = outdir / ("traj_extracted.png" if sm is not None
                   else "traj_overlay.png")
     fig.savefig(p, dpi=170)
@@ -280,19 +326,25 @@ def main(argv=None):
         span = bounds[0, 1] - bounds[0, 0]
         zlo, zhi = xap - 0.18 * span, min(bounds[0, 1], xap + 0.10 * span)
         rlo, rhi = -0.35 * rmax, 0.35 * rmax
-    fig, ax = plt.subplots(figsize=(8, 4.4), constrained_layout=True)
-    pc = draw(ax, tracks, colors, seg, a.surfs, (zlo, zhi), (rlo, rhi))
+    fig, axes = plt.subplots(1, 2, figsize=(11, 4.6), constrained_layout=True,
+                             sharex=True, sharey=True)
+    pc = draw(axes[0], tracks, colors, seg, a.surfs, (zlo, zhi), (rlo, rhi),
+              1, "He slice y = 0\nwall: meridional outline")
+    draw(axes[1], tracks, colors, seg, a.surfs, (zlo, zhi), (rlo, rhi), 2,
+         "He slice x = 0\nwall: meridional outline")
     if pc is not None:
-        fig.colorbar(pc, ax=ax, label="He flow speed |v| (m/s)", pad=0.01,
-                     fraction=0.03)
+        fig.colorbar(pc, ax=axes, label="He flow speed |v| (m/s)", pad=0.01,
+                     fraction=0.03, shrink=0.60)
     if sm is None:
-        ax.legend(handles=handles[:n_fate], loc="lower right", fontsize=8,
-                  framealpha=0.9)
+        axes[0].legend(handles=handles, loc="lower right", fontsize=8,
+                       framealpha=0.9)
     else:
-        fig.colorbar(sm, ax=ax, label="birth radius $r_0$ (m)", pad=0.01,
-                     fraction=0.03)
-    ax.set_title("Extraction region (z = %.1f-%.1f mm)" % (zlo * 1e3, zhi * 1e3),
-                 fontsize=10)
+        fig.colorbar(sm, ax=axes, label="birth radius $r_0$ (m)", pad=0.01,
+                     fraction=0.03, shrink=0.60)
+        axes[0].legend(handles=handles[-2:], loc="lower right", fontsize=8,
+                       framealpha=0.9)
+    fig.suptitle("Extraction region (z = %.1f-%.1f mm)" %
+                 (zlo * 1e3, zhi * 1e3), fontsize=10)
     p = outdir / ("traj_extracted_aperture.png" if sm is not None
                   else "traj_aperture.png")
     fig.savefig(p, dpi=170)
