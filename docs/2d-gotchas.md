@@ -8,7 +8,8 @@ current entrypoints are [`tools/run_helium.sh`](../tools/run_helium.sh) and
 ## Installation
 
 - Run the shell workflow on Linux or inside an Ubuntu WSL terminal. A command
-  entered in PowerShell will not have the expected paths or Linux tools.
+  entered in PowerShell will not have the expected paths or Linux tools. See
+  [Windows/WSL2 setup](../README.md#getting-started-on-windows-wsl2).
 - Use the pinned SPARTA build from
   [`build_sparta_plain.sh`](../tools/wsl/build_sparta_plain.sh). The B5 inlet
   needs `fix emit/surf ... mflow`, which older builds do not provide. Inspect
@@ -47,10 +48,12 @@ certificate.
 
 An installation check with `STEPS=2000` ends before the first field-averaging
 interval. It leaves only the empty step-0 field, which the molecule runner
-correctly rejects. Use the default 120,000-step run before tracing molecules.
+correctly rejects. Save at least one populated averaging window before tracing
+molecules; the default 120,000-step run includes the tutorial settling interval.
 
 Choose a new run name for every attempt. The runner refuses an existing output
-directory and a launch beside another visible SPARTA process. A failed run
+directory. Parallel jobs with distinct names are allowed; divide CPU capacity
+among them because the configurable thread budgets apply per job. A failed run
 directory is still a useful diagnostic receipt; inspect `run.log`,
 `rc.sentinel`, and `manifest.json` before starting under a new name.
 
@@ -102,6 +105,12 @@ does not simulate ablation, chemistry, internal states, or molecule back-action
 on helium. It propagates classical molecules through one frozen helium field
 using the stated molecule-He collision model.
 
+`Maximum iterations exceeded in sampling ...` comes from the table sampler's
+rejection loop, which substitutes a fallback value. The current tracer builds
+that table even with `SAMPLER=exact`; exact-mode collisions bypass it. With
+`SAMPLER=table`, inspect these warnings before interpreting collision results.
+They are written to `trace/tracer.stderr`, separately from bookkeeping checks.
+
 ## Outputs and field selection
 
 Do not infer success from a plot. A helium or molecule run succeeds only when
@@ -109,15 +118,30 @@ Do not infer success from a plot. A helium or molecule run succeeds only when
 directories: the molecule receipt identifies the tracer calculation, while
 the helium receipt identifies the SPARTA calculation that made the field.
 
-`field.grid` contains appended snapshots. The converter selects the final
-snapshot by default. Its `--timestep` option requires an exact saved step and
-refuses a nearby substitute. The one-command molecule runner uses the final
-snapshot and rejects step 0 or a field with fewer than 100 populated cells.
+`field.grid` contains appended snapshots. The converter selects the latest
+complete snapshot by default and ignores an unfinished trailing frame. Its
+`--timestep` option requires an exact saved step; `--until-step` and `--until-ms`
+select the latest complete frame at or before a limit. Choose at most one of
+those three selectors. Time selection uses the
+recorded `DT`, or an explicit `--dt` in seconds. See the
+[mid-run examples](../README.md#inspect-a-run-while-it-continues).
+
+The molecule runner accepts complete frames from running or failed helium
+calculations and records the observed parent status. This permits exploration
+without relabeling a parent calculation as successful. It freezes raw field,
+geometry, and converted data under `field/`, so later helium output cannot
+change its input or plot background. It rejects step 0 or a field with fewer
+than 100 populated cells, as required by tracer interpolation.
 
 A successful molecule directory also has a positive `source_timestep` in
 `field/provenance.json` and exactly `N` data rows in `trace/spawn.csv`.
 `commands.sh` records the converter, tracer, and analyzer commands. Generated
 runs are ignored by Git, so keep or archive the result directories explicitly.
+
+`N=1` and equal per-particle collision counts are valid. Runtime checks compare
+actual hook legs with collision counts and test endpoint continuity; they do
+not require a shuffled-record comparison to fail or impose a universal
+statistical/convergence threshold.
 
 ## Reading the analysis
 

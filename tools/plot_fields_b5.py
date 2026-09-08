@@ -16,44 +16,42 @@ import matplotlib.pyplot as plt
 from matplotlib.collections import PolyCollection
 from matplotlib.lines import Line2D
 
+from field_io import FieldFormatError, read_complete_frames, recorded_dt, resolved_dt
+
 NCOL = 11  # id xc yc xlo ylo xhi yhi nrho u v temp
 
 
-def read_frames(path):
+def read_frames(path, timestep=None, until_step=None, until_ms=None, dt=None):
     """Return (steps, box, cells) with cells[k] = (Ncell, 11) sorted by id.
 
-    Frames whose fields are entirely zero (the step-0 dump, written before the
-    first ave/grid window closes) are dropped.
+    Only complete, nonempty frames are eligible. Bounds include their endpoint.
     """
-    with open(path) as f:
-        lines = f.readlines()
-    steps, box, frames = [], None, []
-    i = 0
-    while i < len(lines):
-        ln = lines[i]
-        if ln.startswith("ITEM: TIMESTEP"):
-            steps.append(int(lines[i + 1]))
-            i += 2
-        elif ln.startswith("ITEM: BOX BOUNDS"):
-            box = [tuple(float(v) for v in lines[i + k].split()) for k in (1, 2)]
-            i += 4
-        elif ln.startswith("ITEM: CELLS"):
-            j = i + 1
-            while j < len(lines) and not lines[j].startswith("ITEM:"):
-                j += 1
-            a = np.array("".join(lines[i + 1:j]).split(), dtype=float)
-            frames.append(a.reshape(-1, NCOL))
-            i = j
-        else:
-            i += 1
-    keep = [(s, fr[np.argsort(fr[:, 0])]) for s, fr in zip(steps, frames)
-            if np.any(fr[:, 7:])]
+    result = read_complete_frames(path)
+    known_dt = resolved_dt(os.path.dirname(path), dt) if dt is not None else recorded_dt(os.path.dirname(path))
+    if until_ms is not None:
+        known_dt = resolved_dt(os.path.dirname(path), dt)
+        limit = until_ms * 1e-3
+        selected = [f for f in result.frames
+                    if f.timestep * known_dt <= limit + abs(limit) * 1e-12]
+    elif timestep is not None:
+        selected = [next((f for f in result.frames if f.timestep == timestep), None)]
+    else:
+        selected = [f for f in result.frames if until_step is None or f.timestep <= until_step]
+    if not selected or selected[0] is None:
+        raise FieldFormatError("no complete frame matches the requested selection")
+    if any(frame.data.shape[1] != NCOL for frame in selected):
+        raise FieldFormatError(f"{path}: B5 plotting needs {NCOL}-column grid frames")
+    keep = [(frame.timestep, frame.data[np.argsort(frame.data[:, 0])])
+            for frame in selected if np.any(frame.data[:, 7:])]
+    if not keep:
+        raise FieldFormatError(f"{path}: selection contains no populated complete frame")
+    box = list(selected[-1].bounds[:2])
     return [s for s, _ in keep], box, [fr for _, fr in keep]
 
 
-def average_tail(path, frac=0.5):
+def average_tail(path, frac=0.5, timestep=None, until_step=None, until_ms=None, dt=None):
     """Mean field over the last `frac` of the non-empty frames."""
-    steps, box, frames = read_frames(path)
+    steps, box, frames = read_frames(path, timestep, until_step, until_ms, dt)
     k = max(1, int(round(len(frames) * frac)))
     sel = frames[-k:]
     ids = sel[0][:, 0]
@@ -64,8 +62,9 @@ def average_tail(path, frac=0.5):
     fields = np.mean([fr[:, 7:] for fr in sel], axis=0)
     d = dict(steps=steps[-k:], box=box, ids=ids, xc=geom[:, 0], yc=geom[:, 1],
              xlo=geom[:, 2], ylo=geom[:, 3], xhi=geom[:, 4], yhi=geom[:, 5],
-             nrho=fields[:, 0], u=fields[:, 1], v=fields[:, 2], t=fields[:, 3],
-             nframe=len(sel), ntot=len(frames))
+              nrho=fields[:, 0], u=fields[:, 1], v=fields[:, 2], t=fields[:, 3],
+             nframe=len(sel), ntot=len(frames), dt=(resolved_dt(os.path.dirname(path), dt)
+                                                    if dt is not None else recorded_dt(os.path.dirname(path))))
     # Per-frame body density, so "converged" vs "still filling" is a number
     # rather than an impression.  Frame grids are identical, so reuse the mask.
     m = ((d["xc"] >= 0.010) & (d["xc"] <= 0.055) & (d["yc"] <= 0.017))
@@ -264,6 +263,14 @@ def report(d, tag):
                 ntot=d["ntot"], s0=d["steps"][0], s1=d["steps"][-1])
 
 
+def frame_label(d):
+    s0, s1 = d["steps"][0], d["steps"][-1]
+    if d["dt"] is None:
+        return f"frames ending at steps {s0}-{s1}"
+    return "frames ending at steps %d-%d (%.3g-%.3g ms)" % (
+        s0, s1, s0 * d["dt"] * 1e3, s1 * d["dt"] * 1e3)
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("ref")
@@ -271,21 +278,29 @@ def main():
     p.add_argument("--outdir", default=".")
     p.add_argument("--frac", type=float, default=0.5)
     p.add_argument("--xrad", type=float, default=0.030)
+    selection = p.add_mutually_exclusive_group()
+    selection.add_argument("--timestep", type=int)
+    selection.add_argument("--until-step", type=int)
+    selection.add_argument("--until-ms", type=float)
+    p.add_argument("--dt", type=float,
+                   help="seconds per SPARTA step when manifest.json has no DT")
     a = p.parse_args()
     os.makedirs(a.outdir, exist_ok=True)
 
     runs = [a.ref] + ([a.other] if a.other else [])
     ds, tags = [], []
     for r in runs:
-        d = average_tail(os.path.join(r, "field.grid"), a.frac)
+        try:
+            d = average_tail(os.path.join(r, "field.grid"), a.frac, a.timestep,
+                             a.until_step, a.until_ms, a.dt)
+        except FieldFormatError as exc:
+            raise SystemExit(str(exc)) from exc
         tag = os.path.basename(os.path.normpath(r))
         surf = surf_by_type(os.path.join(r, "cell_b5.surf"))
         ds.append(d)
         tags.append(tag)
-        fields_figure(d, surf, "B5 mflow cell, %s -- mean of frames %d-%d "
-                      "(%.1f-%.1f ms)" % (tag, d["steps"][0], d["steps"][-1],
-                                          d["steps"][0] * 1e-7 * 1e3,
-                                          d["steps"][-1] * 1e-7 * 1e3),
+        fields_figure(d, surf, "B5 mflow cell, %s -- mean of %s" %
+                      (tag, frame_label(d)),
                       os.path.join(a.outdir, "b5-2d-fields-%s.png" % tag))
         report(d, tag)
     if len(ds) == 2:

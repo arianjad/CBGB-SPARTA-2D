@@ -23,9 +23,45 @@ The full 1,000-molecule run is used for the extraction statistics.
 
 Use Linux, or an Ubuntu terminal in WSL2 on Windows. The reference setup is
 Ubuntu 22.04 with Python 3.10 and Julia 1.9.4. Native Windows and macOS are
-not covered by these shell scripts. On Windows, install WSL first from
-[Microsoft's instructions](https://learn.microsoft.com/windows/wsl/install),
-then run the following **inside Ubuntu**, not PowerShell.
+not covered by these shell scripts.
+
+### Getting started on Windows: WSL2
+
+1. On Windows 11 or Windows 10 version 2004/build 19041 or later, open
+   **PowerShell as Administrator**, install Ubuntu, and restart if prompted:
+
+   ```powershell
+   wsl --install -d Ubuntu-22.04
+   ```
+
+2. Open Ubuntu from the Start menu and create your Linux username/password.
+   In PowerShell, check that the distribution uses version **2**:
+
+   ```powershell
+   wsl --list --verbose
+   ```
+
+   New installations default to WSL2. If an existing Ubuntu-22.04 shows
+   version 1, stop its work before converting it:
+
+   ```powershell
+   wsl --set-version Ubuntu-22.04 2
+   ```
+
+   See [Microsoft's installation guide](https://learn.microsoft.com/en-us/windows/wsl/install)
+   for installation or virtualization errors.
+
+3. Run the remaining commands **inside Ubuntu**. Keep the clone and outputs
+   under `~/code`, as below; Linux builds and runs are faster there than under
+   `/mnt/c/`. Open the current folder in Windows Explorer with `explorer.exe .`.
+   See [Microsoft's filesystem guide](https://learn.microsoft.com/en-us/windows/wsl/filesystems).
+
+The workflow uses CPU MPI and saves PNG figures; no GPU or separate X server
+setup is needed. Choose build jobs and MPI ranks to fit your machine, including
+other simultaneous runs. Install the Linux Python, Julia, and MPI tools below
+inside WSL even if Windows versions are already installed.
+
+### Install the Linux dependencies
 
 ```bash
 sudo apt update
@@ -112,8 +148,8 @@ STEPS=2000 RANKS=1 bash tools/run_helium.sh install-check
 ```
 
 That check is only 0.2 ms and does **not** produce a usable molecule field.
-Use a rank count your machine can support; don't run competing solver jobs.
-The launcher refuses an existing run directory or a second active SPARTA job.
+Use a rank count your machine can support, counting all simultaneous jobs.
+The launcher refuses an existing run directory; independent runs can overlap.
 Wall-clock duration depends on the machine and particle count; 12 ms is
 physical time, not a runtime estimate.
 
@@ -125,8 +161,10 @@ python -m json.tool "$DSMC_RUN_ROOT/first-he/manifest.json"
 python tools/check_grid_2d.py "$DSMC_RUN_ROOT/first-he/field.grid"
 ```
 
-The manifest must say `complete`. `run.log` holds the solver output; errors
-or `failed` status should be resolved before launching molecules.
+For a successfully completed helium calculation, the manifest must say `complete`.
+`run.log` holds the solver output. Saved complete frames from a running or
+stopped calculation can also be analyzed, as described below; that does not
+change the helium calculation's status.
 
 ## 4. Trace molecules and make plots
 
@@ -136,7 +174,7 @@ N=1000 THREADS=4 SEED=42 TRAJPRINT=20 \
   "$DSMC_RUN_ROOT/first-he" "$PWD/results/molecules/first-baf"
 ```
 
-This converts the final helium field, traces 1,000 molecules, scores extraction
+This freezes the latest complete helium field, traces 1,000 molecules, scores extraction
 and crossings at the observation plane, and saves figures. `TRAJPRINT=20`
 records paths for the first 20 molecules; use `0` (the default) to omit path
 recording. Increase `N` for smaller molecular sampling error; recorded paths
@@ -191,6 +229,62 @@ does not automatically change the fill. Recalculate it with the aperture-law
 expression in `cases/b5-lean/gen_b5.py`; reassess particle count, grid, and
 timestep as the physical conditions change. Smaller `FNUM` means more
 simulated helium particles at fixed geometry and density.
+
+### Parallel sweeps
+
+Use distinct run names and divide the available CPU capacity between jobs:
+
+```bash
+RANKS=2 SEED=1001 bash tools/run_helium.sh seed-1001 &
+first=$!
+RANKS=2 SEED=1002 bash tools/run_helium.sh seed-1002 &
+second=$!
+wait "$first"
+wait "$second"
+```
+
+`DSMC_THREAD_BUDGET` (default 16) and `TRACER_THREAD_BUDGET` (default 4)
+are configurable limits for each invocation, not a scheduler for the whole
+machine. Each run records its own parameters and owns its own outputs.
+
+### Inspect a run while it continues
+
+From another Ubuntu terminal, plot completed averaging windows ending at or
+before 5 ms:
+
+```bash
+source .venv/bin/activate
+python tools/plot_fields_b5.py results/he/first-he \
+  --until-ms 5 --frac 1 --outdir results/inspection/up-to-5ms
+```
+
+`--frac 1` averages all saved nonempty frames within that limit; `--frac 0`
+shows only the latest eligible frame. At the default `DT`, frames end at
+2, 4, 6, ... ms, so the 5 ms limit currently includes the 2 and 4 ms frames.
+It cannot create a 5 ms frame or use data that has not been saved yet. The
+plot reports the actual selected steps. Time conversion uses the recorded
+`DT`; use `--dt SECONDS` when a manually supplied field lacks that metadata.
+
+To trace molecules through the latest complete frame ending at or before
+that limit:
+
+```bash
+UNTIL_MS=5 N=100 THREADS=2 bash tools/run_2d_standalone.sh \
+  results/he/first-he results/molecules/early-baf
+```
+
+The molecule launcher also accepts `TIMESTEP` for an exact saved step,
+`UNTIL_STEP` for an upper bound, and `FIELD_DT` to supply seconds per step.
+Choose at most one of `TIMESTEP`, `UNTIL_STEP`, and `UNTIL_MS`.
+It freezes the selected raw field and geometry in the molecule output;
+tracing and plots use that same copy. An unfinished trailing frame is ignored.
+Complete frames remain usable when the helium status is `running` or `failed`;
+the receipt records that status without claiming helium success or equilibrium.
+
+Short runs, changed flow rates, and `N=1` are allowed. Runtime checks protect
+input readability, output ownership, and tracer bookkeeping; see
+[Gotchas](docs/2d-gotchas.md#outputs-and-field-selection) for their scope.
+Settling and numerical convergence remain questions for the observable being studied.
 
 The geometry generator and `in.he_b5_mflow` must be edited together for a new
 cell: refinement regions and diagnostic stations are geometry-dependent.

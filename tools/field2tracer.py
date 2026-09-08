@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Convert a 2D SPARTA helium field and solid walls to molecule-tracer inputs.
 
-Usage: python tools/field2tracer.py RUN_DIR --out OUTPUT_DIR [--timestep STEP]
-Writes DS2FF.DAT, cell.surfs, and provenance.json. Defaults to the final
-retained frame; an explicit timestep must exist exactly.
+Usage: python tools/field2tracer.py RUN_DIR --out OUTPUT_DIR [SELECTION]
+Writes a frozen selected `field.grid`, copied `cell*.surf` files, DS2FF.DAT,
+cell.surfs, and provenance.json. The default is the latest complete frame;
+an explicit timestep must exist exactly.
 
 DS2FF columns: axial x, radial y, T, number density, mass density,
 axial velocity, radial velocity, and zero azimuthal velocity. The tracer's
@@ -16,13 +17,17 @@ degenerate lookup-table ranges; they are software test inputs.
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
 from datetime import datetime, timezone
+from pathlib import Path
 
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from field_io import (FieldFormatError, manifest_info, read_complete_frames,
+                      resolved_dt, select_frame, write_frame)  # noqa: E402
 from plot_fields import wall_segments  # noqa: E402
 
 # Mass-density column convention; the tracer uses number density and drops
@@ -32,67 +37,6 @@ HE_MASS = 6.6464731e-27
 
 def fmt(v):
     return repr(float(v))
-
-
-def last_header(path):
-    """(timestep, ncells, [(lo,hi) x3], nframes) of the LAST snapshot."""
-    step = ncells = None
-    bounds = None
-    nframes = 0
-    with open(path) as f:
-        lines = f.readlines()
-    for i, ln in enumerate(lines):
-        if ln.startswith("ITEM: TIMESTEP"):
-            nframes += 1
-            step = int(lines[i + 1])
-        elif ln.startswith("ITEM: NUMBER OF CELLS"):
-            ncells = int(lines[i + 1])
-        elif ln.startswith("ITEM: BOX BOUNDS"):
-            bounds = [tuple(float(v) for v in lines[i + k].split()) for k in (1, 2, 3)]
-    return step, ncells, bounds, nframes
-
-
-def snapshot(path, timestep=None):
-    """Return one exact dump snapshot plus the total number of snapshots.
-
-    `timestep=None` selects the final frame. A requested
-    timestep must exist exactly; silently falling back to a nearby or final
-    frame would invalidate a field-window comparison.
-    """
-    with open(path) as f:
-        lines = f.readlines()
-    starts = [i for i, line in enumerate(lines) if line.startswith("ITEM: TIMESTEP")]
-    if not starts:
-        raise ValueError("no snapshots in %s" % path)
-    chosen = len(starts) - 1
-    if timestep is not None:
-        matches = [i for i, start in enumerate(starts)
-                   if int(lines[start + 1]) == timestep]
-        if not matches:
-            available = [int(lines[start + 1]) for start in starts]
-            raise ValueError("timestep %d not present in %s; available %s" %
-                             (timestep, path, available))
-        chosen = matches[0]
-    lo = starts[chosen]
-    hi = starts[chosen + 1] if chosen + 1 < len(starts) else len(lines)
-    block = lines[lo:hi]
-    step = int(block[1])
-    try:
-        ni = next(i for i, line in enumerate(block)
-                  if line.startswith("ITEM: NUMBER OF CELLS"))
-        bi = next(i for i, line in enumerate(block)
-                  if line.startswith("ITEM: BOX BOUNDS"))
-        ci = next(i for i, line in enumerate(block)
-                  if line.startswith("ITEM: CELLS"))
-    except StopIteration as exc:
-        raise ValueError("incomplete snapshot at timestep %d in %s" % (step, path)) from exc
-    ncells = int(block[ni + 1])
-    bounds = [tuple(float(v) for v in block[bi + k].split()) for k in (1, 2, 3)]
-    rows = [line.split() for line in block[ci + 1:] if line.strip()]
-    if len(rows) != ncells:
-        raise ValueError("snapshot %d declares %d cells but contains %d" %
-                         (step, ncells, len(rows)))
-    return step, ncells, bounds, len(starts), np.array(rows, dtype=float)
 
 
 def _header(step, n, bounds, kind, cols):
@@ -136,9 +80,30 @@ def git_hash():
         return None
 
 
-def convert(rundir, outdir, dumpname="field.grid", timestep=None):
+def _freeze_inputs(rundir, outdir, dumpname, frame):
+    """Freeze the selected raw field and every cell surface beside conversion."""
+    os.makedirs(outdir, exist_ok=True)
+    write_frame(frame, os.path.join(outdir, dumpname))
+    copied = []
+    for source in sorted(Path(rundir).glob("cell*.surf")):
+        target = Path(outdir) / source.name
+        shutil.copy2(source, target)
+        copied.append(target.name)
+    return copied
+
+
+def convert(rundir, outdir, dumpname="field.grid", timestep=None,
+            until_step=None, until_ms=None, dt=None):
     path = os.path.join(rundir, dumpname)
-    step, ncells, bounds, nframes, data = snapshot(path, timestep)
+    frames = read_complete_frames(path)
+    source_status, manifest_dt = manifest_info(rundir)
+    explicit_dt = resolved_dt(rundir, dt) if dt is not None else None
+    selection_dt = (resolved_dt(rundir, dt) if until_ms is not None
+                    else explicit_dt if explicit_dt is not None else manifest_dt)
+    frame = select_frame(frames.frames, timestep=timestep, until_step=until_step,
+                         until_ms=until_ms, dt=selection_dt)
+    step, bounds, data = frame.timestep, frame.bounds, frame.data
+    ncells, nframes = len(data), len(frames.frames)
     if data.shape[1] >= 11:
         xc, yc = data[:, 1], data[:, 2]
         nrho, u, v, temp = data[:, 7], data[:, 8], data[:, 9], data[:, 10]
@@ -148,6 +113,7 @@ def convert(rundir, outdir, dumpname="field.grid", timestep=None):
     segs = wall_segments(rundir)
     if not segs:
         sys.exit("no cell*.surf in %s: refusing to emit geometry-free input" % rundir)
+    copied_surfaces = _freeze_inputs(rundir, outdir, dumpname, frame)
     nc, ns = write_pair(outdir, step, bounds, zip(xc, yc, temp, nrho, u, v), segs)
 
     run_id = None
@@ -159,8 +125,14 @@ def convert(rundir, outdir, dumpname="field.grid", timestep=None):
             pass
     prov = dict(source_run_dir=os.path.abspath(rundir), source_dump=dumpname,
                 source_run_id=run_id, source_timestep=step,
-                requested_timestep=timestep,
+                selection={"timestep": timestep, "until_step": until_step,
+                           "until_ms": until_ms},
+                source_observed_status=source_status,
+                source_dt_s=selection_dt,
                 header_number_of_cells=ncells, snapshots_in_dump=nframes,
+                ignored_incomplete_tail=frames.ignored_incomplete_tail,
+                frozen_dump=os.path.abspath(os.path.join(outdir, dumpname)),
+                frozen_cell_surfs=copied_surfaces,
                 emitted_cells=nc, emitted_wall_segments=ns,
                 box_bounds=bounds, massrho_per_nrho=HE_MASS,
                 converter="tools/field2tracer.py", converter_git_hash=git_hash(),
@@ -206,14 +178,24 @@ def main():
     p.add_argument("rundir", nargs="?")
     p.add_argument("--out", required=True)
     p.add_argument("--dump", default="field.grid")
-    p.add_argument("--timestep", type=int,
-                   help="convert this exact retained timestep (default: last)")
+    selection = p.add_mutually_exclusive_group()
+    selection.add_argument("--timestep", type=int,
+                           help="convert this exact complete timestep")
+    selection.add_argument("--until-step", type=int,
+                           help="use the latest complete frame at or before this step")
+    selection.add_argument("--until-ms", type=float,
+                           help="use the latest complete frame at or before this time (ms)")
+    p.add_argument("--dt", type=float,
+                   help="timestep size in seconds when --until-ms cannot read manifest.json")
     p.add_argument("--synthetic", nargs=8, type=float,
                    metavar=("T", "NRHO", "XLO", "XHI", "YLO", "YHI", "NX", "NY"))
     a = p.parse_args()
-    prov = synthetic(a.synthetic, a.out) if a.synthetic else \
-        convert(a.rundir or sys.exit("need a run dir or --synthetic"), a.out,
-                a.dump, a.timestep)
+    try:
+        prov = synthetic(a.synthetic, a.out) if a.synthetic else \
+            convert(a.rundir or sys.exit("need a run dir or --synthetic"), a.out,
+                    a.dump, a.timestep, a.until_step, a.until_ms, a.dt)
+    except FieldFormatError as exc:
+        sys.exit(str(exc))
     print("wrote %s: %d cells, %d wall segments" %
           (a.out, prov["emitted_cells"], prov["emitted_wall_segments"]))
 

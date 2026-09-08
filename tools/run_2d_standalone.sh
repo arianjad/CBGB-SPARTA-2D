@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# Convert one completed 2D helium run, trace the configured heavy species,
+# Freeze one complete 2D helium snapshot, trace the configured heavy species,
 # and emit exit/crossing metrics plus helium/molecule figures.
 #
 # Usage: tools/run_2d_standalone.sh HELIUM_RUN OUT_DIR [SOURCE_CONFIG]
 # Runtime controls: N (1000), THREADS (4), SEED (42), PYTHON (python3),
 # JULIA (julia), TRACER_THREAD_BUDGET (4), HEATBINS (8,4), TRAJPRINT (0).
+# Field selection: TIMESTEP (exact), UNTIL_STEP or UNTIL_MS (upper bound),
+# FIELD_DT (seconds per step, overrides recorded helium DT).
 set -euo pipefail
 
 if [ "$#" -lt 2 ] || [ "$#" -gt 3 ]; then
@@ -46,22 +48,6 @@ compgen -G "$helium_run/cell*.surf" >/dev/null || {
 command -v "$python_cmd" >/dev/null || { echo "missing Python command: $python_cmd" >&2; exit 3; }
 command -v "$julia_cmd" >/dev/null || { echo "missing Julia command: $julia_cmd" >&2; exit 3; }
 
-# A populated field can exist while its solver is still running or has failed.
-"$python_cmd" - "$helium_run" <<'PY'
-import json
-import sys
-from pathlib import Path
-
-root = Path(sys.argv[1])
-try:
-    status = json.loads((root / 'manifest.json').read_text())['status']
-    rc = (root / 'rc.sentinel').read_text().strip()
-except (OSError, ValueError, KeyError) as exc:
-    raise SystemExit(f'incomplete helium receipt: {exc}')
-if status != 'complete' or rc != '0':
-    raise SystemExit(f'helium run is not complete: status={status}, rc={rc}')
-PY
-
 helium_run=$(cd "$helium_run" && pwd -P)
 config=$(cd "$(dirname "$config")" && pwd -P)/$(basename "$config")
 config_origin=$config
@@ -88,7 +74,8 @@ esac
 case "$SAMPLER" in exact|table) ;; *) echo "REFUSE: unsupported SAMPLER=$SAMPLER" >&2; exit 2 ;; esac
 case "$SPAWN_CLIP" in 0|1) ;; *) echo "REFUSE: SPAWN_CLIP must be 0 or 1" >&2; exit 2 ;; esac
 
-mkdir -p "$out"
+mkdir -p "$(dirname "$out")"
+mkdir "$out" || { echo "REFUSE: cannot reserve output directory: $out" >&2; exit 4; }
 out=$(cd "$out" && pwd -P)
 mkdir -p "$out/field" "$out/trace" "$out/figures"
 printf '%s\n' "$config_text" > "$out/source.conf"
@@ -139,9 +126,9 @@ else:
     repo = repo_arg
     he = helium_arg
     cfg = config_arg
-    inputs = [he / "field.grid", he / "manifest.json", cfg,
+    inputs = [cfg,
               repo / "tools/run_2d_standalone.sh",
-              repo / "tools/field2tracer.py", repo / "tools/plot_fields.py",
+              repo / "tools/field2tracer.py", repo / "tools/field_io.py", repo / "tools/plot_fields.py",
               repo / "tools/plot_fields_b5.py", repo / "tools/plot_trajectories.py",
               repo / "tracer/accumulators/crossing.jl",
               repo / "tracer/ParticleTracing.jl", repo / "tracer/Project.toml",
@@ -186,6 +173,10 @@ else:
             data["helium_manifest_status"] = json.loads(hm.read_text(encoding="utf-8")).get("status")
         except Exception:
             data["helium_manifest_status"] = "unreadable"
+field = out_arg / "field"
+if (field / "provenance.json").exists() and "helium_snapshot" not in data:
+    data["helium_snapshot"] = json.loads((field / "provenance.json").read_text())
+    data["input_sha256"].update({str(q): digest(q) for q in field.iterdir() if q.is_file()})
 data["status"] = os.environ["STANDALONE_STATUS"]
 data["current_stage"] = os.environ["STANDALONE_STAGE"]
 data["updated_utc"] = datetime.now(timezone.utc).isoformat()
@@ -222,6 +213,10 @@ record_command() {
 stage=convert_field
 write_manifest running "$stage"
 convert=("$python_cmd" "$repo/tools/field2tracer.py" "$helium_run" --out "$out/field")
+[ -z "${TIMESTEP:-}" ] || convert+=(--timestep "$TIMESTEP")
+[ -z "${UNTIL_STEP:-}" ] || convert+=(--until-step "$UNTIL_STEP")
+[ -z "${UNTIL_MS:-}" ] || convert+=(--until-ms "$UNTIL_MS")
+[ -z "${FIELD_DT:-}" ] || convert+=(--dt "$FIELD_DT")
 record_command "$stage" "${convert[@]}"
 "${convert[@]}" > "$out/convert.stdout" 2> "$out/convert.stderr"
 
@@ -250,7 +245,7 @@ PY
 
 stage=plot_helium
 write_manifest running "$stage"
-plot_he=("$python_cmd" "$repo/tools/plot_fields_b5.py" "$helium_run" --frac 0 --outdir "$out/figures")
+plot_he=("$python_cmd" "$repo/tools/plot_fields_b5.py" "$out/field" --frac 0 --outdir "$out/figures")
 record_command "$stage" "${plot_he[@]}"
 "${plot_he[@]}" > "$out/helium-plot.stdout" 2> "$out/helium-plot.stderr"
 

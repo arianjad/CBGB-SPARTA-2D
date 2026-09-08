@@ -19,10 +19,9 @@ the birthplace-to-extraction correlation visible; the default fate colouring
 
 Geometry, the domain box and the extraction plane all come from the .surfs the
 tracer itself was given, so the figure cannot silently disagree with the run.
-The greyscale flow background is optional and self-locating: the field
-directory's provenance.json records the SPARTA run it was converted from, and
-that run's field.grid supplies the per-cell |v| map.  With no run dir reachable
-the walls and trajectories are drawn on their own.
+The greyscale flow background comes from the frozen field beside the geometry.
+For older outputs without that file, provenance selects its recorded source
+timestep exactly. With neither source available, walls and paths are drawn alone.
 
 Coordinates: tracer z is the SPARTA axial coordinate, and the tracer's
 transverse pair (x, y) gives the SPARTA radius r = sqrt(x^2 + y^2).
@@ -42,7 +41,7 @@ from matplotlib.colors import LogNorm, ListedColormap
 from matplotlib.lines import Line2D
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from plot_fields import last_frame  # noqa: E402
+from field_io import FieldFormatError, read_complete_frames, select_frame  # noqa: E402
 from tracer_analyze import read_surfs, clip_legs, COLS  # noqa: E402
 
 # Okabe-Ito, colourblind-safe; blue/vermillion match tracer_analyze.py.
@@ -120,18 +119,35 @@ def build(outfile, surfs):
     return tracks, fates, coll, seg, xap, bounds
 
 
-def background(ax, surfs):
-    """Greyscale |v| map of the SPARTA run this field came from, if reachable."""
+def background_data(surfs):
+    """Return frozen data, or the exact source timestep named in provenance."""
     prov = Path(surfs).parent / "provenance.json"
-    if not prov.exists():
+    frozen = Path(surfs).parent / "field.grid"
+    if frozen.is_file():
+        return read_complete_frames(frozen).frames[-1].data
+    if not prov.is_file():
         return None
     try:
-        rundir = json.loads(prov.read_text()).get("source_run_dir")
-    except Exception:
+        source = json.loads(prov.read_text())
+        rundir = source.get("source_run_dir")
+        step = source["source_timestep"]
+    except (OSError, ValueError, KeyError):
         return None
     if not rundir or not os.path.exists(os.path.join(rundir, "field.grid")):
         return None
-    data = last_frame(os.path.join(rundir, "field.grid"))
+    try:
+        data = select_frame(read_complete_frames(os.path.join(rundir, "field.grid")).frames,
+                            timestep=step).data
+    except FieldFormatError:
+        return None
+    return data
+
+
+def background(ax, surfs):
+    """Add the selected frozen |v| map when an extended grid is available."""
+    data = background_data(surfs)
+    if data is None:
+        return None
     if data.shape[1] < 11:
         return None                      # legacy 7-column dump: no cell extents
     xlo, ylo, xhi, yhi = data[:, 3], data[:, 4], data[:, 5], data[:, 6]

@@ -1,9 +1,11 @@
-"""Shared SPARTA wall and final-frame readers.
+"""Shared SPARTA wall and complete-frame readers.
 
 For helium figures, run tools/plot_fields_b5.py.
 """
 import glob
 import numpy as np
+
+from field_io import read_complete_frames, select_frame
 
 def wall_segments(rundir, pattern="cell*.surf"):
     """Polyline segments from a .surf in the run dir, or None.
@@ -35,20 +37,7 @@ def wall_segments(rundir, pattern="cell*.surf"):
             segs.append((pts[ids[-2]], pts[ids[-1]]))
     return segs or None
 
-def last_frame(path):
-    rows = None
-    with open(path) as f:
-        lines = f.readlines()
-    i = 0
-    while i < len(lines):
-        if lines[i].startswith("ITEM: CELLS"):
-            j = i + 1
-            block = []
-            while j < len(lines) and not lines[j].startswith("ITEM:"):
-                block.append(lines[j].split())
-                j += 1
-            rows = block
-            i = j
-        else:
-            i += 1
-    return np.array(rows, dtype=float)
+def last_frame(path, timestep=None):
+    """Return the latest complete frame, or one exact complete timestep."""
+    frames = read_complete_frames(path).frames
+    return select_frame(frames, timestep=timestep).data
