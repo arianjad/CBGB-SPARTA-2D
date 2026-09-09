@@ -59,6 +59,11 @@ directory is still a useful diagnostic receipt; inspect `run.log`,
 
 ## Axisymmetric geometry
 
+![The same recorded 3D paths projected onto z-x and z-y](images/trajectories.png)
+
+The tutorial paths retain both transverse signs. Dashed lines mark the
+projected centerline; circles mark births and crosses estimated terminations.
+
 SPARTA coordinates are axial `x` and nonnegative radius `y`. The molecule
 tracer uses Cartesian coordinates internally; the
 [field converter](../tools/field2tracer.py) performs the mapping. Do not swap

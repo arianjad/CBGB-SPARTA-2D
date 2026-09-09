@@ -205,6 +205,11 @@ space, wall-hit/source maps, and (when requested) trajectory figures.
 
 ### Reading the trajectory views
 
+![Exit zoom of the same 3D BaF paths in two signed Cartesian projections](docs/images/trajectories-aperture.png)
+
+Exit-region detail of the tutorial paths shown above. These 20 molecules all
+hit walls; the two panels show different projections of the same paths.
+
 `traj_overlay.png` shows the same recorded Cartesian paths in two signed
 projections, `(z, x)` and `(z, y)`; `traj_aperture.png` zooms into the exit.
 Here `z` is axial and `x, y` are transverse. Unlike a `(z, r)` plot with
