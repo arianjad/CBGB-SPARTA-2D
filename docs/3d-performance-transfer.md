@@ -9,6 +9,13 @@ remove the inherited finite `gmax` proposal envelope or change the approximate
 free-flight hazard. This is an implementation-equivalence and efficiency
 change, not a physics validation.
 
+The direct tracer CLI also used to pass Boolean values for optional statistics
+files. `SimulateParticles` enables statistics for every value other than
+`nothing`, so even `false` constructed a 100×100 `StatsArray` for each
+particle. The CLI now passes the requested filename or `nothing`, and the
+simulator returns `nothing` for an unrequested statistics result. The
+`Crossing` driver deliberately supplies an accumulator and is unchanged.
+
 ## Checks and measurements
 
 Run the data-independent regression from a fresh public clone with Julia 1.9.4
@@ -20,7 +27,11 @@ julia --startup-file=no --project=tracer --threads=1 tracer/test_partner_allocat
 
 It compares the production sampler against the pre-change body for 27
 seed/temperature/slip cases, 1000 accepted draws per case, and ten subsequent
-RNG draws. All 54 assertions passed. A single warmed 100,000-draw diagnostic
+RNG draws. All 54 sampler assertions passed. Three additional checks exercise
+the direct CLI with a generated field: absent statistics return `nothing`,
+while an explicitly requested statistics CSV is still written. A fixed-seed
+five-particle CLI run also produced the same stdout SHA-256 as public `main`
+without a statistics request. A single warmed 100,000-draw diagnostic
 within that script allocated 74,463,120 bytes with the reference and 8,000,080
 bytes with the candidate; checksums matched. These are cumulative allocations,
 not peak memory.
@@ -69,9 +80,8 @@ ratio comparison with the public-field benchmark; the much larger default
 statistics allocation can mask the sampler saving. The initial temporary
 benchmark harness was subsequently revised, and this private field is not in
 the public repository, so the retained local log is a diagnostic, not a public
-reproduction recipe. The direct tracer entry point currently passes Boolean
-statistics flags, while `SimulateParticles` tests for non-`nothing`; its default
-statistics work therefore runs even when a statistics CSV was not requested.
+reproduction recipe. This library call explicitly requested statistics; the
+CLI fix above does not change that allocation result.
 
 ## Other transfer decisions
 
@@ -82,6 +92,7 @@ statistics work therefore runs even when a statistics CSV was not requested.
 | Vector particle batching | Defer. The 3D drift replay showed poor useful-slot occupancy for unequal lifetimes and no actual-path gain. A 2D rewrite would also need independent particle RNG and termination parity. |
 | Column-oriented field reader | Defer pending a 2D whole-call benchmark. The 3D result required a concrete return-type fix before its isolated reader gain reached the full call; the present 2D field build and file size differ. |
 | Scalar exact collision partner | Applied here. Seed and whole-trajectory parity pass at one and four threads; whole-call allocation falls for the specified synthetic workload. |
+| Optional trajectory statistics | Fixed the 2D CLI's Boolean-to-`nothing` mismatch. Unrequested statistics now skip per-particle arrays; requested CSV output still passes its direct-path check. |
 | Run-scoped page-cache control | The helium solver launcher is a separate concern. The 3D runner records an optional `systemd-run` memory scope for large field dumps; this branch does not change the 2D helium launcher or its run semantics. |
 
 The unused legacy lookup table is intentionally still built. In 3D, omitting

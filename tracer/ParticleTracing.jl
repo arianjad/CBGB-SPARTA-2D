@@ -704,6 +704,10 @@ function SimulateParticles(
     output_dim = length(propagate(zeros(3), zeros(3), interpolate!, (x,y)->true, table))
     outputs = zeros(nParticles, output_dim)
 
+    # Keep absent outputs as nothing; callers use that sentinel to skip
+    # per-particle statistics work entirely.
+    allstats = nothing
+    boundstats = nothing
     # Initializes statistics arrays
     if !isnothing(savestats)
         allstats = new_stats()
@@ -844,8 +848,8 @@ function main(args)
         args["zmax"],
         args["pflip"],
         args["saveall"],
-        !isnothing(args["stats"]),
-        !isnothing(args["exitstats"]);
+        args["stats"],
+        args["exitstats"];
         savespawns = args["spawnout"])
     runtime = time() - start
     if !isnothing(args["stats"])

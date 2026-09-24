@@ -37,6 +37,41 @@ end
     end
 end
 
+@testset "unrequested CLI statistics stay disabled" begin
+    mktempdir() do dir
+        geom = joinpath(dir, "cell.surfs")
+        flow = joinpath(dir, "DS2FF.DAT")
+        write(geom, "ITEM: TIMESTEP\n0\nITEM: NUMBER OF SURFS\n1\n" *
+                    "ITEM: BOX BOUNDS oo ao pp\n0.0 0.2\n0.0 0.02\n-0.5 0.5\n" *
+                    "ITEM: SURFS id v1x v1y v2x v2y\n1 0.3 0.024 0.4 0.024\n")
+        open(flow, "w") do io
+            print(io, "ITEM: TIMESTEP\n0\nITEM: NUMBER OF CELLS\n400\n" *
+                      "ITEM: BOX BOUNDS oo ao pp\n0.0 0.2\n0.0 0.02\n-0.5 0.5\n" *
+                      "ITEM: CELLS xc yc temp nrho massrho u v w\n")
+            for ix in 0:39, iy in 0:9
+                temp = 4.0 * (0.9975 + 0.005*ix/39)
+                println(io, "$(0.0025 + 0.005*ix) $(0.001 + 0.002*iy) $temp 2e19 1.32929462e-7 0.1 0.0 0.0")
+            end
+        end
+        options = copy(args)
+        options["geom"] = geom
+        options["flow"] = flow
+        options["n"] = 1
+        options["T"] = 0.0
+        options["z"] = 0.05
+        options["vz"] = 1000.0
+        options["seed"] = 42
+        options["saveall"] = 1
+        options["stats"] = nothing
+        options["exitstats"] = nothing
+        @test isnothing(main(options))
+
+        options["stats"] = joinpath(dir, "stats.csv")
+        @test !isnothing(main(options))
+        @test isfile(options["stats"])
+    end
+end
+
 function batch(sampler, n)
     w = [100.0, -50.0, 25.0]
     checksum = 0.0
