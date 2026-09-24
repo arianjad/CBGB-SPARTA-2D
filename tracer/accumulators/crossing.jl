@@ -159,7 +159,8 @@ outputs, _, acc = SimulateParticles(
     args["omega"], args["zmin"], args["zmax"], args["pflip"],
     args["saveall"],
     true, false;                 # exactly what main() passes: !isnothing(args[...])
-    make_stats = Crossing, savespawns = args["spawnout"])
+    make_stats = Crossing, savespawns = args["spawnout"],
+    keep_unsampled = args["keep_unsampled"])
 wall = time() - t0
 @printf(stderr, "crossing.jl: %d particles, %.1f s wall, x_obs = %.6f m\n",
         NPART, wall, XOBS)

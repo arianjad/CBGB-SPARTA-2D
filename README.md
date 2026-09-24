@@ -312,9 +312,16 @@ plot reports the actual selected steps. Time conversion uses the recorded
 For equal-duration saved windows, the plotter takes a time mean of number
 density and uses each cell's density to weight velocity and temperature
 between windows. This prevents empty/sparse windows from pulling those
-conditional quantities toward zero. The temperature is a weighted mean of
+conditional quantities toward zero; windows with zero saved temperature are
+excluded from the temperature denominator. The temperature is a weighted mean of
 saved window temperatures, not a fresh pooled-variance calculation. Tracing
 still uses one selected raw frame.
+
+New B5 fields include SPARTA flow area, so the plot can distinguish solid
+cells from open cells with zero sampled density. For a positive-density cell
+with unavailable saved temperature, tracing stops unless `KEEP_UNSAMPLED=1`
+explicitly selects nearest-cell temperature borrowing; see
+[Gotchas](docs/2d-gotchas.md#sparse-cells-in-averaged-field-plots).
 
 To trace molecules through the latest complete frame ending at or before
 that limit:

@@ -4,7 +4,8 @@
 #
 # Usage: tools/run_2d_standalone.sh HELIUM_RUN OUT_DIR [SOURCE_CONFIG]
 # Runtime controls: N (1000), THREADS (4), SEED (42), PYTHON (python3),
-# JULIA (julia), TRACER_THREAD_BUDGET (4), HEATBINS (8,4), TRAJPRINT (0).
+# JULIA (julia), TRACER_THREAD_BUDGET (4), HEATBINS (8,4), TRAJPRINT (0),
+# KEEP_UNSAMPLED (0; explicit nearest-cell temperature borrowing if 1).
 # Field selection: TIMESTEP (exact), UNTIL_STEP or UNTIL_MS (upper bound),
 # FIELD_DT (seconds per step, overrides recorded helium DT).
 set -euo pipefail
@@ -26,12 +27,14 @@ seed=${SEED:-42}
 thread_budget=${TRACER_THREAD_BUDGET:-4}
 heatbins=${HEATBINS:-8,4}
 trajprint=${TRAJPRINT:-0}
+keep_unsampled=${KEEP_UNSAMPLED:-0}
 
 case "$n" in ''|*[!0-9]*|0) echo "REFUSE: N must be a positive integer" >&2; exit 2 ;; esac
 case "$threads" in ''|*[!0-9]*|0) echo "REFUSE: THREADS must be a positive integer" >&2; exit 2 ;; esac
 case "$thread_budget" in ''|*[!0-9]*|0) echo "REFUSE: TRACER_THREAD_BUDGET must be a positive integer" >&2; exit 2 ;; esac
 case "$seed" in ''|*[!0-9]*) echo "REFUSE: SEED must be a non-negative integer" >&2; exit 2 ;; esac
 case "$trajprint" in ''|*[!0-9]*) echo "REFUSE: TRAJPRINT must be a non-negative integer" >&2; exit 2 ;; esac
+case "$keep_unsampled" in 0|1) ;; *) echo "REFUSE: KEEP_UNSAMPLED must be 0 or 1" >&2; exit 2 ;; esac
 if [ "$threads" -gt "$thread_budget" ]; then
   echo "REFUSE: THREADS=$threads exceeds TRACER_THREAD_BUDGET=$thread_budget" >&2
   exit 2
@@ -97,6 +100,7 @@ export STANDALONE_N="$n" STANDALONE_THREADS="$threads" STANDALONE_THREAD_BUDGET=
 export STANDALONE_SEED="$seed" STANDALONE_TRAJPRINT="$trajprint" STANDALONE_OBS_X="$OBS_X_M" STANDALONE_JULIA="$julia_cmd"
 export STANDALONE_JULIA_VERSION="$julia_version" STANDALONE_PYTHON="$python_cmd"
 export STANDALONE_PYTHON_VERSION="$python_version" STANDALONE_CREATED="$created" STANDALONE_OUT="$out"
+export STANDALONE_KEEP_UNSAMPLED="$keep_unsampled"
 export MASS_U CROSS_SECTION_M2 SOURCE_T_K SPAWN_MODE SPAWN_SIZE_M SPAWN_R_M SPAWN_Z_M SPAWN_CLIP SAMPLER
 
 write_manifest() {
@@ -147,6 +151,7 @@ else:
         "n_particles": int(os.environ["STANDALONE_N"]),
         "particle_seed": int(os.environ["STANDALONE_SEED"]),
         "trajectory_print_particles": int(os.environ["STANDALONE_TRAJPRINT"]),
+        "keep_unsampled_temperature": os.environ["STANDALONE_KEEP_UNSAMPLED"] == "1",
         "julia_threads": int(os.environ["STANDALONE_THREADS"]),
         "thread_budget": int(os.environ["STANDALONE_THREAD_BUDGET"]),
         "observation_plane_m": float(os.environ["STANDALONE_OBS_X"]),
@@ -258,6 +263,7 @@ trace=("$julia_cmd" --project="$repo/tracer" --threads="$threads"
        --spawn "$SPAWN_MODE" --spawnsize "$SPAWN_SIZE_M" -r "$SPAWN_R_M" -z "$SPAWN_Z_M"
        --spawnclip "$SPAWN_CLIP" --sampler "$SAMPLER" --saveall 1 --trajprint "$trajprint"
        --spawnout "$out/trace/spawn.csv")
+if [ "$keep_unsampled" = 1 ]; then trace+=(--keep-unsampled); fi
 record_command "$stage" "${trace[@]}"
 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1 \
   "${trace[@]}" > "$out/trace/tracer.stdout" 2> "$out/trace/tracer.stderr"

@@ -75,7 +75,7 @@ dump        dar surf ar 1000 ar.out id f_aar
 compute     cg grid all hegas nrho u v
 compute     tg thermal/grid all hegas temp
 fix         ag ave/grid all 10 2000 20000 c_cg[*] c_tg[*]
-dump        gd grid all 20000 field.grid id xc yc xlo ylo xhi yhi f_ag[*]
+dump        gd grid all 20000 field.grid id xc yc xlo ylo xhi yhi f_ag[*] vol
 stats       5000
 stats_style step cpu np nattempt ncoll f_src[1] f_src[2]
 stats_modify flush yes

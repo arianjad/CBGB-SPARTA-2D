@@ -72,6 +72,29 @@ end
     end
 end
 
+@testset "positive-density zero-T cells retain their own collision density" begin
+    mktempdir() do dir
+        geom = joinpath(dir, "cell.surfs")
+        flow = joinpath(dir, "DS2FF.DAT")
+        write(geom, "ITEM: TIMESTEP\n0\nITEM: NUMBER OF SURFS\n1\n" *
+                    "ITEM: BOX BOUNDS oo ao pp\n0.0 0.2\n0.0 0.02\n-0.5 0.5\n" *
+                    "ITEM: SURFS id v1x v1y v2x v2y\n1 0.3 0.024 0.4 0.024\n")
+        write(flow, "ITEM: TIMESTEP\n0\nITEM: NUMBER OF CELLS\n3\n" *
+                    "ITEM: BOX BOUNDS oo ao pp\n0.0 0.2\n0.0 0.02\n-0.5 0.5\n" *
+                    "ITEM: CELLS xc yc temp nrho massrho u v w\n" *
+                    "0.010 0.001 0.0 7e19 0 19.0 0.0 0.0\n" *
+                    "0.012 0.001 4.2 2e19 0 2.0 0.0 0.0\n" *
+                    "0.050 0.002 5.0 3e19 0 3.0 0.0 0.0\n")
+        @test_throws ErrorException build_field(geom, flow)
+        field = build_field(geom, flow; keep_unsampled=true)
+        props = zeros(8)
+        field.interpolate!(props, [0.001, 0.0, 0.010])
+        @test props[5] == 19.0  # local axial flow, not the donor's flow
+        @test props[6] == 4.2   # only temperature borrowed
+        @test props[7] == 7e19  # local collision density survives
+    end
+end
+
 function batch(sampler, n)
     w = [100.0, -50.0, 25.0]
     checksum = 0.0
