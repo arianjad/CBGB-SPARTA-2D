@@ -57,6 +57,22 @@ RAM reduction. Other fields, sources, particle counts and Julia versions may
 give different costs. The benchmark harness and generated data are local
 ignored outputs; the public regression above is independently runnable.
 
+An earlier diagnostic shows why the accumulator matters. It used a locally
+saved 200-cell, near-4 K field, 1000 particles, the same 300 K point-source
+generator, seed 20260923, one Julia thread, and the tracer's default 100×100
+`StatsArray` per particle instead of `Crossing`. The six interleaved calls all
+had 43,727 legs. Allocation fell only from 4,567,602,104 to 4,537,742,744
+bytes (0.65%). Baseline time was 2.060 s median [1.840, 2.567]; candidate
+time was 1.879 s median [1.820, 2.465]. These overlapping ranges do not
+establish a runtime gain. The different field and accumulator prevent a direct
+ratio comparison with the public-field benchmark; the much larger default
+statistics allocation can mask the sampler saving. The initial temporary
+benchmark harness was subsequently revised, and this private field is not in
+the public repository, so the retained local log is a diagnostic, not a public
+reproduction recipe. The direct tracer entry point currently passes Boolean
+statistics flags, while `SimulateParticles` tests for non-`nothing`; its default
+statistics work therefore runs even when a statistics CSV was not requested.
+
 ## Other transfer decisions
 
 | 3D investigation | 2D decision |
