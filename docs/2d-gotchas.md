@@ -57,6 +57,15 @@ among them because the configurable thread budgets apply per job. A failed run
 directory is still a useful diagnostic receipt; inspect `run.log`,
 `rc.sentinel`, and `manifest.json` before starting under a new name.
 
+## Sparse cells in averaged field plots
+
+In plots combining several saved helium fields, centerline cells can be
+sparsely occupied. `plot_fields_b5.py` time-averages number density across
+equal-duration windows, but weights velocity and temperature by the cell's
+number density in each window. A zero-density window has no measured flow or
+temperature to contribute; its zero values should not dilute those plots.
+The number-density time mean still includes that window.
+
 ## Axisymmetric geometry
 
 ![The same recorded 3D paths projected onto z-x and z-y](images/trajectories.png)

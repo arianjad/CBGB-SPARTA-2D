@@ -274,6 +274,24 @@ wait "$second"
 are configurable limits for each invocation, not a scheduler for the whole
 machine. Each run records its own parameters and owns its own outputs.
 
+For long sequential sweeps in a memory-limited Linux/WSL2 guest, the solver
+can accumulate a large page cache while writing `field.grid`. If the guest
+uses systemd user services, you can bound each run's cache with a user scope;
+choose `MemoryHigh` for your available memory and test the scope first:
+
+```bash
+systemd-run --user --scope -p MemoryHigh=24G true
+DSMC_LAUNCH_PREFIX='systemd-run --user --scope -p MemoryHigh=24G' \
+DSMC_EVICT_DUMP_CACHE=1 bash tools/run_helium.sh sweep-01
+```
+
+The prefix is recorded in the run manifest. `DSMC_EVICT_DUMP_CACHE=1` also
+requests release of **that run's** completed `field.grid` from Linux page
+cache, without deleting the file or dropping other applications' caches.
+It may make an immediate reread slower. Cache release is advisory; an error
+is reported after the run without changing the solver's return code. Both
+controls are optional and apply separately to each invocation.
+
 ### Inspect a run while it continues
 
 From another Ubuntu terminal, plot completed averaging windows ending at or
@@ -285,12 +303,18 @@ python tools/plot_fields_b5.py results/he/first-he \
   --until-ms 5 --frac 1 --outdir results/inspection/up-to-5ms
 ```
 
-`--frac 1` averages all saved nonempty frames within that limit; `--frac 0`
+`--frac 1` combines all saved nonempty frames within that limit; `--frac 0`
 shows only the latest eligible frame. At the default `DT`, frames end at
 2, 4, 6, ... ms, so the 5 ms limit currently includes the 2 and 4 ms frames.
 It cannot create a 5 ms frame or use data that has not been saved yet. The
 plot reports the actual selected steps. Time conversion uses the recorded
 `DT`; use `--dt SECONDS` when a manually supplied field lacks that metadata.
+For equal-duration saved windows, the plotter takes a time mean of number
+density and uses each cell's density to weight velocity and temperature
+between windows. This prevents empty/sparse windows from pulling those
+conditional quantities toward zero. The temperature is a weighted mean of
+saved window temperatures, not a fresh pooled-variance calculation. Tracing
+still uses one selected raw frame.
 
 To trace molecules through the latest complete frame ending at or before
 that limit:
