@@ -390,10 +390,14 @@ Accepts as input the velocity of a particle v, the mean velocity of a buffer gas
     gmax = LinearAlgebra.norm(w0) + 8.0*s
     gmax == 0.0 && return [0.0, 0.0, 0.0]  # T=0 gas at rest relative to particle: delta-function partner (also SimulateParticles' zero-velocity output_dim dummy call)
     while true
-        u = s .* Random.randn(3)
-        g = sqrt((w0[1]-u[1])^2+(w0[2]-u[2])^2+(w0[3]-u[3])^2)
+        # Julia 1.9.4 draws a three-element randn array from the same scalar
+        # stream. Keep that draw order, but allocate only on acceptance.
+        u1 = s * Random.randn()
+        u2 = s * Random.randn()
+        u3 = s * Random.randn()
+        g = sqrt((w0[1]-u1)^2+(w0[2]-u2)^2+(w0[3]-u3)^2)
         if Random.rand()*gmax < g
-            return u
+            return [u1, u2, u3]
         end
     end
 end
@@ -700,6 +704,10 @@ function SimulateParticles(
     output_dim = length(propagate(zeros(3), zeros(3), interpolate!, (x,y)->true, table))
     outputs = zeros(nParticles, output_dim)
 
+    # Keep absent outputs as nothing; callers use that sentinel to skip
+    # per-particle statistics work entirely.
+    allstats = nothing
+    boundstats = nothing
     # Initializes statistics arrays
     if !isnothing(savestats)
         allstats = new_stats()
@@ -840,8 +848,8 @@ function main(args)
         args["zmax"],
         args["pflip"],
         args["saveall"],
-        !isnothing(args["stats"]),
-        !isnothing(args["exitstats"]);
+        args["stats"],
+        args["exitstats"];
         savespawns = args["spawnout"])
     runtime = time() - start
     if !isnothing(args["stats"])
