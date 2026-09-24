@@ -245,6 +245,10 @@ function parse_commandline()
             help = "if nonzero (default), reject spawn positions separated from the spawn region's reference point by geometry, i.e. born inside a wall or outside the domain; resamples until valid"
             arg_type = Int
             default = 1
+        "--keep-unsampled"
+            help = "retain positive-density cells whose saved T is zero; borrow only T from the nearest positive-T cell, preserving the original density and flow (explicit model choice)"
+            action = :store_true
+            dest_name = "keep_unsampled"
     end
 
     return parse_args(s)
@@ -592,14 +596,28 @@ end
 # Initializes a variable to track the number of interpolation lookups performed
 interps = 0
 
-function build_field(geomFile, gridFile)
+function build_field(geomFile, gridFile; keep_unsampled=false)
     bounds = Matrix(CSV.read(geomFile, DataFrame; header = ["min","max"], skipto=6, limit=2,ignorerepeated=true,delim=' '))
     geom = Matrix(CSV.read(geomFile, DataFrame; header=["ID","x1","y1","x2","y2"],skipto=10, ignorerepeated=true,delim=' '))
     max_x_geom = maximum(geom[:,[2,4]])
     griddf = CSV.read(gridFile, DataFrame; header=["x","y","T","ρ","ρm","vx","vy","vz"],skipto=10,ignorerepeated=true,delim=' ')
 
-    # Reorder columns and only include grid cells with data
+    # A zero thermal/grid temperature in a positive-density cell is an
+    # unavailable estimate, not evidence that its density and flow vanished.
+    # Fail closed unless the caller explicitly elects nearest-cell T borrowing.
     DataFrames.select!(griddf, [:x, :y, :vx, :vy, :vz, :T, :ρ])
+    bad = (griddf.ρ .> 0) .& (griddf.T .<= 0)
+    if any(bad)
+        keep_unsampled || error("$(count(bad)) positive-density cells have nonpositive saved T in $gridFile; rerun with --keep-unsampled to preserve their density/flow and borrow T from the nearest measured cell")
+        donors = griddf[(griddf.T .> 0) .& (griddf.ρ .> 0), :]
+        isempty(donors) && error("$gridFile has no positive-T cells for --keep-unsampled")
+        donor_tree = KDTree(transpose(Matrix(donors[:, [:x, :y]])); leafsize=10)
+        for i in findall(bad)
+            j = knn(donor_tree, [griddf.x[i], griddf.y[i]], 1)[1][1]
+            griddf.T[i] = donors.T[j]
+        end
+        @printf(stderr, "Borrowed T for %d positive-density cells; original density and flow retained.\n", count(bad))
+    end
     griddf = griddf[griddf.T .> 0, :]
     # Column 8 is kept at 0 so props keeps its 8-slot layout; nothing reads it
     # for uncached field lookups.
@@ -685,10 +703,12 @@ function SimulateParticles(
     rbins=100,
     zbins=100;
     savespawns=nothing,
-    make_stats=nothing
+    make_stats=nothing,
+    keep_unsampled=false
     )
 
-    (; interpolate!, getCollision, table, bounds, max_x_geom) = build_field(geomFile, gridFile)
+    (; interpolate!, getCollision, table, bounds, max_x_geom) =
+        build_field(geomFile, gridFile; keep_unsampled=keep_unsampled)
 
     # Per-leg accumulator factory.  Defaults to the bundled
     # StatsArray.  Pass make_stats to instrument a run with any accumulator
@@ -850,7 +870,8 @@ function main(args)
         args["saveall"],
         args["stats"],
         args["exitstats"];
-        savespawns = args["spawnout"])
+        savespawns = args["spawnout"],
+        keep_unsampled = args["keep_unsampled"])
     runtime = time() - start
     if !isnothing(args["stats"])
         CSV.write(args["stats"], convert(DataFrame, allstats))

@@ -28,9 +28,11 @@ exit 77
 SH
 chmod +x "$tmp/julia"
 for status in running failed; do
+  keep=0
+  [ "$status" = failed ] && keep=1
   printf '{"status":"%s","command":["spa_mpi","-in","in.he","-var","DT","1e-7"],"runtime_controls":{"mpi_ranks":1}}\n' "$status" > "$tmp/he/manifest.json"
   rc=0
-  UNTIL_MS=5 JULIA="$tmp/julia" PYTHON="$python_cmd" \
+  UNTIL_MS=5 KEEP_UNSAMPLED="$keep" JULIA="$tmp/julia" PYTHON="$python_cmd" \
     bash "$repo/tools/run_2d_standalone.sh" "$tmp/he" "$tmp/$status" > "$tmp/log" 2>&1 || rc=$?
   if [ "$rc" != 77 ]; then
     cat "$tmp/log" "$tmp/$status/convert.stderr" "$tmp/$status/helium-plot.stderr"
@@ -43,6 +45,8 @@ p = Path(sys.argv[1])
 m = json.loads((p / 'manifest.json').read_text())
 assert m['current_stage'] == 'trace_crossings'
 assert m['helium_manifest_status'] == sys.argv[2]
+assert m['keep_unsampled_temperature'] == (sys.argv[2] == 'failed')
+assert ('--keep-unsampled' in (p / 'commands.sh').read_text()) == (sys.argv[2] == 'failed')
 assert m['helium_snapshot']['source_timestep'] == 40000
 raw = p / 'field/field.grid'
 assert raw.read_text().count('ITEM: TIMESTEP') == 1

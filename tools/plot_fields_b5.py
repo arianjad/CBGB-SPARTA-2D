@@ -6,7 +6,9 @@ Uses the dump's bounds, aligns cells by ID, and combines the last --frac of
 nonempty frames. Density is time averaged; velocity and temperature are
 weighted by each frame's density in that cell. --frac 0 selects only the final
 frame. The inlet cap is
-drawn separately. Only zero-density cells are omitted; dilute gas is shown.
+drawn separately. New dumps include flow area (`vol`) so open cells with zero
+sampled density can be marked separately from solid cells. Legacy dumps cannot
+make that distinction.
 """
 import argparse
 import os
@@ -17,14 +19,15 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.collections import PolyCollection
 from matplotlib.lines import Line2D
+from matplotlib.patches import Patch
 
 from field_io import FieldFormatError, read_complete_frames, recorded_dt, resolved_dt
 
-NCOL = 11  # id xc yc xlo ylo xhi yhi nrho u v temp
+NCOL = (11, 12)  # optional trailing SPARTA flow area `vol`
 
 
 def read_frames(path, timestep=None, until_step=None, until_ms=None, dt=None):
-    """Return (steps, box, cells) with cells[k] = (Ncell, 11) sorted by id.
+    """Return (steps, box, cells) with cells[k] sorted by id.
 
     Only complete, nonempty frames are eligible. Bounds include their endpoint.
     """
@@ -41,10 +44,13 @@ def read_frames(path, timestep=None, until_step=None, until_ms=None, dt=None):
         selected = [f for f in result.frames if until_step is None or f.timestep <= until_step]
     if not selected or selected[0] is None:
         raise FieldFormatError("no complete frame matches the requested selection")
-    if any(frame.data.shape[1] != NCOL for frame in selected):
-        raise FieldFormatError(f"{path}: B5 plotting needs {NCOL}-column grid frames")
+    widths = {frame.data.shape[1] for frame in selected}
+    if len(widths) != 1 or not widths.issubset(NCOL):
+        raise FieldFormatError(f"{path}: B5 plotting needs consistent 11/12-column grid frames")
+    if 12 in widths and any(frame.columns[-1] != "vol" for frame in selected):
+        raise FieldFormatError(f"{path}: 12th grid column must be SPARTA vol")
     keep = [(frame.timestep, frame.data[np.argsort(frame.data[:, 0])])
-            for frame in selected if np.any(frame.data[:, 7:])]
+            for frame in selected if np.any(frame.data[:, 7:11])]
     if not keep:
         raise FieldFormatError(f"{path}: selection contains no populated complete frame")
     box = list(selected[-1].bounds[:2])
@@ -61,24 +67,37 @@ def average_tail(path, frac=0.5, timestep=None, until_step=None, until_ms=None, 
         if not np.array_equal(fr[:, 0], ids):
             raise SystemExit("grid changed between frames in %s" % path)
     geom = sel[0][:, 1:7]
-    values = np.stack([fr[:, 7:] for fr in sel])
+    values = np.stack([fr[:, 7:11] for fr in sel])
     density = values[:, :, 0]
     nrho = np.mean(density, axis=0)
     occupied = np.sum(density, axis=0)
-    flow_and_temp = np.divide(
-        np.sum(density[:, :, None] * values[:, :, 1:], axis=0),
-        occupied[:, None],
-        out=np.zeros((len(ids), 3)), where=occupied[:, None] > 0)
+    flow_and_temp = np.zeros((len(ids), 3))
+    np.divide(np.sum(density[:, :, None] * values[:, :, 1:3], axis=0),
+              occupied[:, None], out=flow_and_temp[:, :2],
+              where=occupied[:, None] > 0)
+    # thermal/grid writes zero when the window did not measure temperature;
+    # that window has no temperature estimate even if its density is positive.
+    measured_t = values[:, :, 3] > 0
+    t_weight = np.sum(np.where(measured_t, density, 0.0), axis=0)
+    np.divide(np.sum(np.where(measured_t, density * values[:, :, 3], 0.0), axis=0),
+              t_weight, out=flow_and_temp[:, 2], where=t_weight > 0)
     d = dict(steps=steps[-k:], box=box, ids=ids, xc=geom[:, 0], yc=geom[:, 1],
              xlo=geom[:, 2], ylo=geom[:, 3], xhi=geom[:, 4], yhi=geom[:, 5],
              nrho=nrho, u=flow_and_temp[:, 0], v=flow_and_temp[:, 1],
              t=flow_and_temp[:, 2],
              nframe=len(sel), ntot=len(frames), dt=(resolved_dt(os.path.dirname(path), dt)
                                                     if dt is not None else recorded_dt(os.path.dirname(path))))
+    d["vol"] = sel[0][:, 11] if sel[0].shape[1] == 12 else None
+    if d["vol"] is not None:
+        if np.any(d["vol"] < 0) or not np.all(np.isfinite(d["vol"])):
+            raise FieldFormatError(f"{path}: invalid SPARTA vol values")
+        if any(not np.array_equal(fr[:, 11], d["vol"]) for fr in sel[1:]):
+            raise FieldFormatError(f"{path}: grid flow area changed between frames")
     # Per-frame body density, so "converged" vs "still filling" is a number
     # rather than an impression.  Frame grids are identical, so reuse the mask.
     m = ((d["xc"] >= 0.010) & (d["xc"] <= 0.055) & (d["yc"] <= 0.017))
-    w = d["yc"][m] * (d["xhi"][m] - d["xlo"][m]) * (d["yhi"][m] - d["ylo"][m])
+    w = d["yc"][m] * (d["vol"][m] if d["vol"] is not None else
+                       (d["xhi"][m] - d["xlo"][m]) * (d["yhi"][m] - d["ylo"][m]))
     d["trend"] = [(s, float(np.sum(fr[m, 7] * w) / np.sum(w)))
                   for s, fr in zip(steps, frames)]
     return d
@@ -115,7 +134,7 @@ def draw_geom(ax, surf):
 
 
 def verts_and_mirror(d):
-    good = d["nrho"] > 0
+    good = open_cells(d)
     v = []
     for sgn in (1, -1):
         for a, b, c, e in zip(d["xlo"][good], d["ylo"][good],
@@ -124,7 +143,13 @@ def verts_and_mirror(d):
     return good, v
 
 
-def panel(ax, fig, verts, vals, label, cmap, surf, box, center=False, clim=None):
+def open_cells(d):
+    """Classify gas by flow area when available; legacy dumps are ambiguous."""
+    return d["vol"] > 0 if d.get("vol") is not None else d["nrho"] > 0
+
+
+def panel(ax, fig, verts, vals, label, cmap, surf, box, center=False, clim=None,
+          zero_verts=()):
     pc = PolyCollection(verts, array=vals, cmap=cmap, edgecolors="none")
     if center:
         m = np.nanmax(np.abs(vals))
@@ -132,6 +157,9 @@ def panel(ax, fig, verts, vals, label, cmap, surf, box, center=False, clim=None)
     elif clim:
         pc.set_clim(*clim)
     ax.add_collection(pc)
+    if zero_verts:
+        ax.add_collection(PolyCollection(zero_verts, facecolors="0.8",
+                                         edgecolors="none"))
     fig.colorbar(pc, ax=ax, label=label, pad=0.01)
     draw_geom(ax, surf)
     ax.set_xlim(box[0])
@@ -142,23 +170,29 @@ def panel(ax, fig, verts, vals, label, cmap, surf, box, center=False, clim=None)
 
 def fields_figure(d, surf, title, out):
     good, verts = verts_and_mirror(d)
+    zero = good & (d["nrho"] == 0)
+    _, zero_verts = verts_and_mirror({**d, "vol": np.where(zero, 1.0, 0.0)})
     mir = lambda a: np.concatenate([a[good], a[good]])
     fig, axes = plt.subplots(3, 1, figsize=(12, 9.5), sharex=True,
                              constrained_layout=True)
     panel(axes[0], fig, verts, mir(np.log10(np.where(d["nrho"] > 0, d["nrho"], np.nan))),
-          r"$\log_{10}\,n$  (m$^{-3}$)", "viridis", surf, d["box"])
-    panel(axes[1], fig, verts, mir(d["u"]),
+          r"$\log_{10}\,n$  (m$^{-3}$)", "viridis", surf, d["box"],
+          zero_verts=zero_verts)
+    panel(axes[1], fig, verts, mir(np.where(d["nrho"] > 0, d["u"], np.nan)),
           r"axial velocity $u$  (m s$^{-1}$)", "coolwarm", surf, d["box"],
-          center=True)
+          center=True, zero_verts=zero_verts)
     tvals = np.where(d["t"] > 0, d["t"], np.nan)
     panel(axes[2], fig, verts, mir(tvals),
           r"thermal temperature $T$  (K)", "inferno", surf, d["box"],
-          clim=(0.0, min(np.nanmax(tvals), 8.0)))
+          clim=(0.0, min(np.nanmax(tvals), 8.0)), zero_verts=zero_verts)
     axes[2].set_xlabel("x (m)")
     axes[0].set_title(title)
-    axes[0].legend(handles=[Line2D([], [], color="0.25", lw=1.5, label="cell wall"),
-                            Line2D([], [], color="tab:red", lw=2.6,
-                                   label="emitting cap (surf type 2)")],
+    handles = [Line2D([], [], color="0.25", lw=1.5, label="cell wall"),
+               Line2D([], [], color="tab:red", lw=2.6,
+                      label="emitting cap (surf type 2)")]
+    if zero_verts:
+        handles.append(Patch(facecolor="0.8", label="open cell, zero sampled density"))
+    axes[0].legend(handles=handles,
                    loc="upper right", fontsize=8, framealpha=0.9)
     fig.savefig(out, dpi=160)
     plt.close(fig)
@@ -167,13 +201,16 @@ def fields_figure(d, surf, title, out):
 
 def axis_profile(d):
     """On-axis (ylo == 0) cells, sorted by x."""
-    m = (d["ylo"] == 0.0) & (d["nrho"] > 0)
+    m = (d["ylo"] == 0.0) & open_cells(d)
     o = np.argsort(d["xc"][m])
-    return (d["xc"][m][o], d["nrho"][m][o], d["u"][m][o], d["t"][m][o])
+    n = d["nrho"][m][o]
+    u = np.where(n > 0, d["u"][m][o], np.nan)
+    t = np.where((n > 0) & (d["t"][m][o] > 0), d["t"][m][o], np.nan)
+    return d["xc"][m][o], n, u, t
 
 
 def radial_profile(d, x0):
-    m = (d["xlo"] <= x0) & (d["xhi"] > x0) & (d["nrho"] > 0)
+    m = (d["xlo"] <= x0) & (d["xhi"] > x0) & open_cells(d)
     o = np.argsort(d["yc"][m])
     return d["yc"][m][o], d["nrho"][m][o]
 
@@ -181,21 +218,28 @@ def radial_profile(d, x0):
 def region_mean(d, xlo, xhi, rmax, field="nrho"):
     """Volume-weighted mean over an (x, r) box; axisymmetric weight r*dx*dr."""
     m = ((d["xc"] >= xlo) & (d["xc"] <= xhi) & (d["yc"] <= rmax)
-         & (d["nrho"] > 0))
-    w = d["yc"][m] * (d["xhi"][m] - d["xlo"][m]) * (d["yhi"][m] - d["ylo"][m])
+         & open_cells(d) & ((d["nrho"] > 0) | (field == "nrho")))
+    w = d["yc"][m] * (d["vol"][m] if d["vol"] is not None else
+                       (d["xhi"][m] - d["xlo"][m]) * (d["yhi"][m] - d["ylo"][m]))
     return float(np.sum(d[field][m] * w) / np.sum(w)), int(m.sum())
 
 
 def on_axis_at(d, x0, field):
     x, n, u, t = axis_profile(d)
     vals = dict(nrho=n, u=u, t=t)[field]
-    return float(vals[np.argmin(np.abs(x - x0))]), float(x[np.argmin(np.abs(x - x0))])
+    measured = np.isfinite(vals)
+    if not np.any(measured):
+        raise FieldFormatError(f"no measured on-axis {field} cells")
+    x, vals = x[measured], vals[measured]
+    i = np.argmin(np.abs(x - x0))
+    return float(vals[i]), float(x[i])
 
 
 def compare_figure(a, b, la, lb, surf, out, xrad=0.030):
     if not np.array_equal(a["ids"], b["ids"]):
         raise SystemExit("run grids differ; ratio map not defined")
-    good = (a["nrho"] > 0) & (b["nrho"] > 0)
+    both_open = open_cells(a) & open_cells(b)
+    good = both_open & (a["nrho"] > 0) & (b["nrho"] > 0)
     verts = []
     for sgn in (1, -1):
         for x1, y1, x2, y2 in zip(a["xlo"][good], a["ylo"][good],
@@ -212,6 +256,11 @@ def compare_figure(a, b, la, lb, surf, out, xrad=0.030):
     m = np.nanpercentile(np.abs(lr), 99.5)
     pc.set_clim(-m, m)
     axm.add_collection(pc)
+    zero_pair = both_open & ((a["nrho"] == 0) | (b["nrho"] == 0))
+    if np.any(zero_pair):
+        _, zero_verts = verts_and_mirror({**a, "vol": np.where(zero_pair, 1.0, 0.0)})
+        axm.add_collection(PolyCollection(zero_verts, facecolors="0.8",
+                                          edgecolors="none"))
     fig.colorbar(pc, ax=axm, label=r"$\log_{10}$ density ratio", pad=0.01)
     draw_geom(axm, surf)
     axm.set_xlim(a["box"][0])
@@ -235,7 +284,12 @@ def compare_figure(a, b, la, lb, surf, out, xrad=0.030):
             r"$n$ (m$^{-3}$) at $x=%g$ mm" % (xrad * 1e3), True)]
     for ax, series, ylab, logy in sub:
         for xs, ys, lab in series:
-            ax.plot(xs, ys, lw=1.3, label=lab)
+            line, = ax.plot(xs, ys, lw=1.3, label=lab)
+            if logy and np.any(ys == 0) and np.any(ys > 0):
+                floor = np.min(ys[ys > 0]) / 3
+                ax.scatter(xs[ys == 0], np.full(np.count_nonzero(ys == 0), floor),
+                           marker="v", color=line.get_color(), s=24,
+                           label=lab + ": zero sampled density")
         if logy:
             ax.set_yscale("log")
         ax.set_ylabel(ylab)
@@ -256,7 +310,7 @@ def report(d, tag):
     plume, xp = on_axis_at(d, 0.075, "nrho")
     uap, xu = on_axis_at(d, 0.0650, "u")
     ax_x, _, ax_u, _ = axis_profile(d)
-    i = int(np.argmax(ax_u))
+    i = int(np.nanargmax(ax_u))
     umax, xm = float(ax_u[i]), float(ax_x[i])
     print("[%s] frames %d/%d, steps %d..%d" %
           (tag, d["nframe"], d["ntot"], d["steps"][0], d["steps"][-1]))

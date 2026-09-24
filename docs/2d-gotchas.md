@@ -65,6 +65,24 @@ equal-duration windows, but weights velocity and temperature by the cell's
 number density in each window. A zero-density window has no measured flow or
 temperature to contribute; its zero values should not dilute those plots.
 The number-density time mean still includes that window.
+Likewise, a positive-density window with zero saved thermal temperature does
+not contribute a temperature measurement to the combined temperature plot.
+
+New `field.grid` dumps append SPARTA's `vol` (2D flow area). The plotter uses
+positive flow area to identify open cells, shows open cells with zero sampled
+density in gray, and includes their zeros in density profiles and region
+means. Solid cells have zero flow area and stay excluded. Older 11-column
+dumps do not identify which zero-density cells are open; their zero cells
+remain ambiguous and omitted by this plotter.
+
+If a frozen tracer field has positive density but zero saved temperature, the
+tracer now stops with the count rather than deleting that cell and substituting
+a neighbor's density and velocity. `KEEP_UNSAMPLED=1` on
+`run_2d_standalone.sh` (or `--keep-unsampled` on the Julia tracer) explicitly
+borrows temperature from the nearest positive-temperature cell while retaining
+the original cell's density and flow. The run manifest and tracer stderr record
+the choice. This is a model choice for a sparse thermal estimate; rerunning
+the helium simulation with better sampling may be preferable.
 
 ## Axisymmetric geometry
 

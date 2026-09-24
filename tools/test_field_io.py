@@ -93,6 +93,46 @@ def main():
         assert np.isclose(pooled["u"][0], 82.0)
         assert np.isclose(pooled["v"][0], 8.2)
         assert np.isclose(pooled["t"][0], 8.5)
+        sparse_t = root / "sparse-temperature.grid"
+        no_t = [row.copy() for row in ROWS_LATE]
+        no_t[0][10] = 0
+        sparse_t.write_text(frame(20_000, ROWS_FLOW) + frame(40_000, no_t))
+        recovered = pfb.average_tail(sparse_t, frac=1)
+        assert np.isclose(recovered["nrho"][0], 5e20)
+        assert np.isclose(recovered["u"][0], 82.0)
+        assert np.isclose(recovered["t"][0], 4.0)
+
+        # New SPARTA dumps append flow area. A zero-density open cell must be
+        # retained in the axis profile and density denominator; a solid cell
+        # with zero flow area must not enter either.
+        vgrid = root / "field-with-vol.grid"
+        vr = [ROWS_ZERO[0] + [1e-4],
+              ROWS_FLOW[1] + [1e-4],
+              [3, .045, .005, .04, 0, .05, .01, 0, 0, 0, 0, 0]]
+        vgrid.write_text(frame(20_000, vr).replace(
+            "ITEM: CELLS " + COLUMNS, "ITEM: CELLS " + COLUMNS + " vol"))
+        with_vol = pfb.average_tail(vgrid, frac=0)
+        assert np.array_equal(pfb.open_cells(with_vol), [True, True, False])
+        assert np.array_equal(pfb.axis_profile(with_vol)[1], [0, 2e20])
+        assert np.isnan(pfb.axis_profile(with_vol)[2][0])
+        assert np.isnan(pfb.axis_profile(with_vol)[3][0])
+        mean, count = pfb.region_mean(with_vol, .02, .05, .01)
+        assert count == 2 and np.isclose(mean, 1e20)
+        pfb.fields_figure(with_vol, {}, "zero-density gas", root / "vol.png")
+        assert (root / "vol.png").is_file()
+        other = {**with_vol, "nrho": with_vol["nrho"].copy()}
+        other["nrho"][:2] = [1e20, 1e20]
+        pfb.compare_figure(with_vol, other, "zero", "sampled", {},
+                           root / "ratio.png", xrad=.035)
+        assert (root / "ratio.png").is_file()
+        bad_vol = root / "bad-vol.grid"
+        bad_vol.write_text(vgrid.read_text().replace(" temp vol", " temp extra"))
+        try:
+            pfb.average_tail(bad_vol, frac=0)
+        except FieldFormatError:
+            pass
+        else:
+            raise AssertionError("non-vol 12th column was accepted")
 
         frozen_bytes = (out / "field.grid").read_bytes()
         # A live source advancing after conversion must not alter the frozen
