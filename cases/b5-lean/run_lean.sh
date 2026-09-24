@@ -2,7 +2,9 @@
 # run_lean.sh RUNSUB NPROC DECKNAME VARSTRING BINARY CASEDIR FILE...
 # Portable lean runner. Invoke this tracked file from a Linux/WSL clone.
 # Override roots/aliases with DSMC_REPO_ROOT, DSMC_RUN_ROOT, DSMC_LOG_ROOT,
-# SPARTA_PLAIN_EXE.
+# SPARTA_PLAIN_EXE. DSMC_LAUNCH_PREFIX optionally wraps the solver (for
+# example, systemd-run --user --scope -p MemoryHigh=24G).
+# DSMC_EVICT_DUMP_CACHE=1 releases clean field.grid cache after a run.
 set -u
 
 if [ "$#" -lt 7 ]; then
@@ -22,6 +24,7 @@ sparta_tag=${SPARTA_TAG:-}
 sparta_commit=${SPARTA_COMMIT:-}
 solver_receipt=${SPARTA_BUILD_RECEIPT:-}
 runner_thread_budget=${DSMC_THREAD_BUDGET:-16}
+evict_dump_cache=${DSMC_EVICT_DUMP_CACHE:-0}
 export OMP_NUM_THREADS=${OMP_NUM_THREADS:-1}
 export OPENBLAS_NUM_THREADS=${OPENBLAS_NUM_THREADS:-1}
 export MKL_NUM_THREADS=${MKL_NUM_THREADS:-1}
@@ -31,6 +34,7 @@ case "$sub" in ""|*/*|.|..) echo "REFUSE: RUNSUB must be one directory name" >&2
 case "$casedir" in ""|/*|../*|*/../*|*/..) echo "REFUSE: CASEDIR must stay under cases/" >&2; exit 2 ;; esac
 case "$np" in ''|*[!0-9]*|0) echo "REFUSE: NPROC must be a positive integer" >&2; exit 2 ;; esac
 case "$runner_thread_budget" in ''|*[!0-9]*|0) echo "REFUSE: DSMC_THREAD_BUDGET must be a positive integer" >&2; exit 2 ;; esac
+case "$evict_dump_cache" in 0|1) ;; *) echo "REFUSE: DSMC_EVICT_DUMP_CACHE must be 0 or 1" >&2; exit 2 ;; esac
 per_rank_threads=1
 for count in "$OMP_NUM_THREADS" "$OPENBLAS_NUM_THREADS" "$MKL_NUM_THREADS" "$NUMEXPR_NUM_THREADS"; do
   case "$count" in ''|*[!0-9]*|0) echo "REFUSE: runtime thread counts must be positive integers" >&2; exit 2 ;; esac
@@ -87,6 +91,8 @@ for kv in "${kvs[@]}"; do
   varflags+=(-var "${kv%%=*}" "${kv#*=}")
 done
 command_argv=("$exe" -in "$deck" "${varflags[@]}")
+launch_prefix=()
+if [ -n "${DSMC_LAUNCH_PREFIX:-}" ]; then read -ra launch_prefix <<< "$DSMC_LAUNCH_PREFIX"; fi
 
 say "START np=$np deck=$deck exe=$exe"
 if ! mkdir "$d"; then say "REFUSE: cannot reserve run directory: $d"; exit 3; fi
@@ -112,12 +118,15 @@ receipt=("$python_cmd" "$manifest_tool" start
   --runtime-control "OPENBLAS_NUM_THREADS=$OPENBLAS_NUM_THREADS"
   --runtime-control "MKL_NUM_THREADS=$MKL_NUM_THREADS"
   --runtime-control "NUMEXPR_NUM_THREADS=$NUMEXPR_NUM_THREADS"
-  --runtime-control "DSMC_THREAD_BUDGET=$runner_thread_budget")
+  --runtime-control "DSMC_THREAD_BUDGET=$runner_thread_budget"
+  --runtime-control "DSMC_EVICT_DUMP_CACHE=$evict_dump_cache")
 if [ -z "$solver_receipt" ] && [ -f "$exe.build.json" ]; then solver_receipt=$exe.build.json; fi
 if [ -n "$solver_receipt" ]; then receipt+=(--solver-receipt "$solver_receipt"); fi
 if [ "$np" -eq 1 ]; then
+  for arg in "${launch_prefix[@]}"; do receipt+=("--command-arg=$arg"); done
   for arg in "${command_argv[@]}"; do receipt+=("--command-arg=$arg"); done
 else
+  for arg in "${launch_prefix[@]}"; do receipt+=("--command-arg=$arg"); done
   receipt+=(--command-arg=mpirun)
   receipt+=(--command-arg=-np "--command-arg=$np")
   for arg in "${command_argv[@]}"; do receipt+=("--command-arg=$arg"); done
@@ -129,15 +138,20 @@ if ! "${receipt[@]}"; then say "REFUSE: could not write provenance receipt"; exi
 
 cd "$d" || exit 8
 if [ "$np" -eq 1 ]; then
-  "${command_argv[@]}" &> run.log
+  "${launch_prefix[@]}" "${command_argv[@]}" &> run.log
 else
-  mpirun -np "$np" "${command_argv[@]}" &> run.log
+  "${launch_prefix[@]}" mpirun -np "$np" "${command_argv[@]}" &> run.log
 fi
 rc=$?
 printf '%s\n' "$rc" > rc.sentinel
 finished=$(date -u +%FT%TZ)
 if ! "$python_cmd" "$manifest_tool" finish --run-dir "$d" --exit-code "$rc" --finished "$finished"; then
   say "ERROR: solver rc=$rc but final provenance update failed"; exit 8
+fi
+if [ "$evict_dump_cache" = 1 ] && [ -f field.grid ]; then
+  if ! "$python_cmd" "$script_dir/../../tools/evict_dump_cache.py" field.grid; then
+    say "WARN: field.grid cache release failed (solver rc=$rc)"
+  fi
 fi
 say "DONE rc=$rc"
 echo "SENTINEL_RC=$rc RUN_DIR=$d"

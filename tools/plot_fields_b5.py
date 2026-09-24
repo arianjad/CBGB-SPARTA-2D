@@ -2,8 +2,10 @@
 """Render B5 helium fields and optional two-run comparisons.
 
 Usage: python tools/plot_fields_b5.py RUN_DIR [OTHER_RUN] --outdir FIGURES
-Uses the dump's bounds, aligns cells by ID, and averages the last --frac of
-nonempty frames. --frac 0 selects only the final frame. The inlet cap is
+Uses the dump's bounds, aligns cells by ID, and combines the last --frac of
+nonempty frames. Density is time averaged; velocity and temperature are
+weighted by each frame's density in that cell. --frac 0 selects only the final
+frame. The inlet cap is
 drawn separately. Only zero-density cells are omitted; dilute gas is shown.
 """
 import argparse
@@ -50,7 +52,7 @@ def read_frames(path, timestep=None, until_step=None, until_ms=None, dt=None):
 
 
 def average_tail(path, frac=0.5, timestep=None, until_step=None, until_ms=None, dt=None):
-    """Mean field over the last `frac` of the non-empty frames."""
+    """Time-mean density and density-weighted saved flow/T window summaries."""
     steps, box, frames = read_frames(path, timestep, until_step, until_ms, dt)
     k = max(1, int(round(len(frames) * frac)))
     sel = frames[-k:]
@@ -59,10 +61,18 @@ def average_tail(path, frac=0.5, timestep=None, until_step=None, until_ms=None, 
         if not np.array_equal(fr[:, 0], ids):
             raise SystemExit("grid changed between frames in %s" % path)
     geom = sel[0][:, 1:7]
-    fields = np.mean([fr[:, 7:] for fr in sel], axis=0)
+    values = np.stack([fr[:, 7:] for fr in sel])
+    density = values[:, :, 0]
+    nrho = np.mean(density, axis=0)
+    occupied = np.sum(density, axis=0)
+    flow_and_temp = np.divide(
+        np.sum(density[:, :, None] * values[:, :, 1:], axis=0),
+        occupied[:, None],
+        out=np.zeros((len(ids), 3)), where=occupied[:, None] > 0)
     d = dict(steps=steps[-k:], box=box, ids=ids, xc=geom[:, 0], yc=geom[:, 1],
              xlo=geom[:, 2], ylo=geom[:, 3], xhi=geom[:, 4], yhi=geom[:, 5],
-              nrho=fields[:, 0], u=fields[:, 1], v=fields[:, 2], t=fields[:, 3],
+             nrho=nrho, u=flow_and_temp[:, 0], v=flow_and_temp[:, 1],
+             t=flow_and_temp[:, 2],
              nframe=len(sel), ntot=len(frames), dt=(resolved_dt(os.path.dirname(path), dt)
                                                     if dt is not None else recorded_dt(os.path.dirname(path))))
     # Per-frame body density, so "converged" vs "still filling" is a number
@@ -299,7 +309,7 @@ def main():
         surf = surf_by_type(os.path.join(r, "cell_b5.surf"))
         ds.append(d)
         tags.append(tag)
-        fields_figure(d, surf, "B5 mflow cell, %s -- mean of %s" %
+        fields_figure(d, surf, "B5 mflow cell, %s -- combined %s" %
                       (tag, frame_label(d)),
                       os.path.join(a.outdir, "b5-2d-fields-%s.png" % tag))
         report(d, tag)

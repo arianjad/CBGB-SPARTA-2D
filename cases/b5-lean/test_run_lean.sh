@@ -42,6 +42,8 @@ check() {
 cat > "$FAKE" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "${FAKE_LOG:?}"
+printf 'prefix=%s\n' "${FAKE_PREFIX_MARK:-}" >> "$FAKE_LOG"
+if [ "${FAKE_WRITE_DUMP:-0}" = 1 ]; then printf 'synthetic dump\n' > field.grid; fi
 if [ -n "${FAKE_BARRIER:-}" ]; then
   touch "$FAKE_BARRIER/$(basename "$PWD")"
   for attempt in $(seq 1 100); do
@@ -155,6 +157,22 @@ check wait "$second"
 unset FAKE_BARRIER
 check test "$(cat "$RUNROOT/sweep-a/rc.sentinel")" = 0
 check test "$(cat "$RUNROOT/sweep-b/rc.sentinel")" = 0
+
+# The optional user scope is recorded, and a completed dump can release its
+# own clean page cache without a privileged global cache drop.
+fresh; make_git_repo
+DSMC_LAUNCH_PREFIX="env FAKE_PREFIX_MARK=1" DSMC_EVICT_DUMP_CACHE=1 \
+  FAKE_WRITE_DUMP=1 run cache-sweep deck.in wall.surf > "$TMP/cache-sweep.out"
+check grep -q '^prefix=1$' "$TMP/fake.log"
+check grep -q 'requested page-cache release for field.grid' "$TMP/cache-sweep.out"
+check test "$(cat "$RUNROOT/cache-sweep/rc.sentinel")" = 0
+python3 - "$RUNROOT/cache-sweep/manifest.json" <<'PY'
+import json, pathlib, sys
+m = json.loads(pathlib.Path(sys.argv[1]).read_text())
+assert m["command"][:2] == ["env", "FAKE_PREFIX_MARK=1"]
+assert m["command"][2].endswith("/fake-sparta")
+assert m["runtime_controls"]["DSMC_EVICT_DUMP_CACHE"] == "1"
+PY
 
 # Dirty source state is recorded rather than silently attributed to HEAD.
 fresh; make_git_repo; printf 'untracked\n' > "$REPO/local-note.txt"

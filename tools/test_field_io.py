@@ -86,6 +86,14 @@ def main():
         assert np.allclose(pt.background_data(out / "cell.surfs")[:, 0], [1, 2])
         assert pfb.average_tail(out / "field.grid", frac=0)["dt"] == 2e-7
 
+        # Sparse windows contribute less to plotted flow/temperature summaries,
+        # while number density remains a time average.
+        pooled = pfb.average_tail(grid, frac=1)
+        assert np.isclose(pooled["nrho"][0], 5e20)
+        assert np.isclose(pooled["u"][0], 82.0)
+        assert np.isclose(pooled["v"][0], 8.2)
+        assert np.isclose(pooled["t"][0], 8.5)
+
         frozen_bytes = (out / "field.grid").read_bytes()
         # A live source advancing after conversion must not alter the frozen
         # background selected for trajectories.
