@@ -35,11 +35,20 @@ BASE = os.path.expanduser("~/orcd/scratch/cbgb-sparta-3d")
 EXCLUDE = {127}   # dropped: ions don't leave through the outlet there
 FLOWS = sorted({4} | {int(d[4:]) for d in os.listdir(f"{BASE}/fluor-scan") if d.startswith("sccm")} - EXCLUDE)
 UNDER_RESOLVED = {f for f in FLOWS if f >= 10}   # Ne mean free path < half the 0.41mm chamber cell
-CONDS = [  # (file tag, label, categorical slot colour -- reference palette slots 1-3)
-    ("edep", "energy-dependent σ (default)", "#2a78d6"),
-    ("const2e-18", "constant σ = 2.0e-18 m²", "#eb6834"),
-    ("const1.5e-19", "constant σ = 1.5e-19 m²", "#1baf7a"),
-]
+CONDSETS = {  # (file tag, label, categorical slot colour -- reference palette slots 1-3); first = primary
+    "edep": [
+        ("edep", "energy-dependent σ", "#2a78d6"),
+        ("const2e-18", "constant σ = 2.0e-18 m²", "#eb6834"),
+        ("const1.5e-19", "constant σ = 1.5e-19 m²", "#1baf7a"),
+    ],
+    "table": [  # computed BaF+-Ne cross-section table (tracer default since 55b5f6b)
+        ("table-central", "computed σ table, central", "#2a78d6"),
+        ("table-low", "computed σ table, low variant", "#eb6834"),
+        ("table-high", "computed σ table, high variant", "#1baf7a"),
+    ],
+}
+REF = ("edep", "energy-dependent σ (previous model)", "#9a9994")   # neutral reference line for --set table
+CONDS = CONDSETS["edep"]
 INK, INK2, GRID, SURF = "#0b0b0b", "#52514e", "#e4e3df", "#fcfcfb"
 M_BAF, EV = 156.325 * 1.66054e-27, 1.602177e-19
 KT23 = 1.380649e-23 * 23 / EV
@@ -98,13 +107,24 @@ def style(ax):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--out", default="results/figures/fluor3d_scan")
+    ap.add_argument("--set", choices=sorted(CONDSETS), default="edep",
+                    help="which cross-section conditions to plot (default edep: the original scan)")
+    ap.add_argument("--out", default=None, help="output prefix (default results/figures/fluor3d_scan[_table])")
     a = ap.parse_args()
+    global CONDS
+    CONDS = CONDSETS[a.set]
+    primary = CONDS[0][0]
+    ref = REF if a.set != "edep" else None
+    if a.out is None:
+        a.out = "results/figures/fluor3d_scan" + ("" if a.set == "edep" else f"_{a.set}")
     os.makedirs(os.path.dirname(a.out) or ".", exist_ok=True)
 
     rows, times, energies = [], {}, {}
+    tags = [c[0] for c in CONDS] + ([ref[0]] if ref else [])
     for f in FLOWS:
-        for tag, _, _ in CONDS:
+        if ref and not glob.glob(f"{post_dir(f)}/tracer_{primary}*.out"):
+            continue   # the table set only covers the flows it was run at
+        for tag in tags:
             files = sorted(glob.glob(f"{post_dir(f)}/tracer_{tag}.out") + glob.glob(f"{post_dir(f)}/tracer_{tag}_s*.out"))
             if not files:
                 continue
@@ -115,7 +135,7 @@ def main():
                              wall=int(wall.sum()), frac=p, lo=lo, hi=hi,
                              t_median_ms=float(np.median(r[tr, 11]) * 1e3) if tr.any() else np.nan,
                              E_median_eV=float(np.median(0.5 * M_BAF * (r[tr, 7:10] ** 2).sum(1) / EV)) if tr.any() else np.nan))
-            if tag == "edep":
+            if tag == primary:
                 times[f] = r[tr, 11] * 1e3
                 energies[f] = 0.5 * M_BAF * (r[tr, 7:10] ** 2).sum(1) / EV   # eV at box exit
     if not rows:
@@ -132,25 +152,31 @@ def main():
     fig.patch.set_facecolor(SURF)
     style(ax)
     ends = []
-    for tag, label, col in CONDS:
+    for tag, label, col in CONDS + ([ref] if ref else []):
         d = [x for x in rows if x["cond"] == tag]
         if not d:
+            continue
+        if ref and tag == ref[0]:   # previous model, drawn as a neutral dashed reference
+            f = np.array([x["sccm"] for x in d]); p = np.array([x["frac"] for x in d]) * 100
+            ax.plot(f, p, color=col, lw=1.5, ls="--", marker="o", ms=4, label=label, zorder=2)
             continue
         f = np.array([x["sccm"] for x in d]); p = np.array([x["frac"] for x in d]) * 100
         lo = np.array([x["lo"] for x in d]) * 100; hi = np.array([x["hi"] for x in d]) * 100
         ax.errorbar(f, p, yerr=[p - lo, hi - p], color=col, lw=2, marker="o", ms=6, capsize=3,
                     elinewidth=1, mec=SURF, mew=1.5, label=label, zorder=3)
         ends.append((p[-1], f[-1], label.split(" (")[0]))
-        if tag == "edep":   # same condition, counting only ions that left thermalized
+        if tag == primary:   # same condition, counting only ions that left thermalized
             k = np.array([(energies[x["sccm"]] < E_THERMAL).sum() for x in d])
             n = np.array([x["n"] for x in d])
             w = np.array([wilson(kk, nn) for kk, nn in zip(k, n)]) * 100
             ax.errorbar(f, w[:, 0], yerr=[w[:, 0] - w[:, 1], w[:, 2] - w[:, 0]], color=col, lw=1.5, ls="--",
                         marker="o", ms=5, mfc=SURF, mec=col, mew=1.2, capsize=2, elinewidth=0.8,
-                        label=f"energy-dependent σ, thermalized only (< {E_THERMAL:g} eV)", zorder=3)
+                        label=f"{label}, thermalized only (< {E_THERMAL:g} eV)", zorder=3)
     # direct labels at each series' last point, nudged apart where series end together
     ax.set_xscale("log")
-    ax.set_xlim(0.8, 170)
+    plotted = sorted({x["sccm"] for x in rows})
+    xlo, xhi = (0.8, 170) if not ref else (plotted[0] / 1.25, plotted[-1] * 1.35)
+    ax.set_xlim(xlo, xhi)
     fig.canvas.draw()
     placed = []
     for y, x, text in sorted(ends):
@@ -160,7 +186,7 @@ def main():
             off += 11
         placed.append(ypix + off)
         ax.annotate(text, (x, y), xytext=(6, off), textcoords="offset points", va="center", fontsize=8, color=INK2)
-    ticks = [t for t in (1, 2, 4, 8, 15, 20, 30, 58) if FLOWS[0] <= t <= FLOWS[-1]]
+    ticks = ([t for t in (1, 2, 4, 8, 15, 20, 30, 58) if FLOWS[0] <= t <= FLOWS[-1]] if not ref else plotted)
     ax.set_xticks(ticks)
     ax.set_xticklabels([str(t) for t in ticks])
     ax.minorticks_off()
@@ -168,14 +194,17 @@ def main():
     ax.set_ylabel("BaF⁺ extracted through outlet  [%]", color=INK, fontsize=10)
     ax.set_ylim(bottom=0)
     if UNDER_RESOLVED:   # one band: every flow >= 10 SCCM is under-resolved
-        ax.axvspan(min(UNDER_RESOLVED) / 1.08, 170, color=GRID, alpha=0.5, lw=0, zorder=0)
-    ax.set_title("BaF⁺ extraction fraction vs. flow (500 eV injection, sealed cell)", color=INK, fontsize=11, loc="left", pad=40)
+        ax.axvspan(min(UNDER_RESOLVED) / 1.08, xhi, color=GRID, alpha=0.5, lw=0, zorder=0)
+    ax.set_title("BaF⁺ extraction fraction vs. flow (500 eV injection, sealed cell)", color=INK, fontsize=11, loc="left",
+                 pad=12 + 13 * int(np.ceil(len(ax.get_legend_handles_labels()[0]) / 2)))
     ax.legend(frameon=False, fontsize=8, labelcolor=INK2, loc="lower left", bbox_to_anchor=(0, 1.0), ncol=2,
               handlelength=1.8, columnspacing=1.2)
     fig.text(0.01, 0.01, "Error bars: 95% Wilson interval. Shaded (>= 10 SCCM): chamber grid coarser than twice the Ne\n"
-             "mean free path, so port flow is approximate. 1-2 SCCM extraction is hot ions flying straight through.",
+             "mean free path, so port flow is approximate. " +
+             ("1-2 SCCM extraction is hot ions flying straight through." if not ref else
+              "Dashed blue: ions leaving thermalized\n(< 0.1 eV); the rest at low flow are hot ions coasting straight through."),
              fontsize=7.5, color=INK2)
-    fig.tight_layout(rect=(0, 0.06, 1, 1))
+    fig.tight_layout(rect=(0, 0.08 if ref else 0.06, 1, 1))
     fig.savefig(a.out + "_extraction.png", facecolor=SURF)
     plt.close(fig)
 
@@ -192,7 +221,7 @@ def main():
     for ax, f in zip(axs.flat, fl):
         style(ax)
         t = times[f]
-        n_all = next(x["n"] for x in rows if x["sccm"] == f and x["cond"] == "edep")
+        n_all = next(x["n"] for x in rows if x["sccm"] == f and x["cond"] == primary)
         if len(t):
             hot = energies[f] >= E_THERMAL
             split_hist(ax, t, hot, bins, n_all)
@@ -212,7 +241,7 @@ def main():
         ax.set_title(f"{f} SCCM", fontsize=9, color=INK, loc="left")
         ax.set_xlabel("time from injection to exiting the outlet", fontsize=8, color=INK2)
         ax.set_ylabel("% of injected ions", fontsize=8, color=INK2)
-    fig.suptitle("BaF⁺ pump-out time, injection to outlet (energy-dependent σ)", color=INK, fontsize=11, x=0.01, ha="left")
+    fig.suptitle(f"BaF⁺ pump-out time, injection to outlet ({CONDS[0][1]})", color=INK, fontsize=11, x=0.01, ha="left")
     split_legend(fig)
     fig.text(0.01, 0.01, "Dashed: median of all extracted ions.", fontsize=7.5, color=INK2)
     fig.tight_layout(rect=(0, 0.04, 1, 0.97))
@@ -229,7 +258,7 @@ def main():
         E = energies[f]
         if len(E):
             hot = E >= E_THERMAL
-            n_all = next(x["n"] for x in rows if x["sccm"] == f and x["cond"] == "edep")
+            n_all = next(x["n"] for x in rows if x["sccm"] == f and x["cond"] == primary)
             split_hist(ax, E, hot, ebins, n_all)
             med = np.median(E)
             ax.axvline(med, color=INK, lw=1, ls="--")
@@ -248,7 +277,7 @@ def main():
         ax.set_title(f"{f} SCCM", fontsize=9, color=INK, loc="left")
         ax.set_xlabel("kinetic energy at box exit", fontsize=8, color=INK2)
         ax.set_ylabel("% of injected ions", fontsize=8, color=INK2)
-    fig.suptitle("Extracted BaF⁺ kinetic energy (energy-dependent σ; injected at 500 eV)", color=INK, fontsize=11, x=0.01, ha="left")
+    fig.suptitle(f"Extracted BaF⁺ kinetic energy ({CONDS[0][1]}; injected at 500 eV)", color=INK, fontsize=11, x=0.01, ha="left")
     split_legend(fig)
     fig.text(0.01, 0.01, "Dashed: median of all extracted ions.  Dotted: 3/2 kT at 23 K (3.0 meV).", fontsize=7.5, color=INK2)
     fig.tight_layout(rect=(0, 0.04, 1, 0.97))

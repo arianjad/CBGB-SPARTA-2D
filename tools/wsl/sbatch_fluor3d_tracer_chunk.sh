@@ -14,13 +14,16 @@
 # Writes RUNDIR/post/tracer_<COND>_s<SEED>.out. Chunks with different seeds
 # are independent samples; tools/plot_fluor3d_scan.py pools every
 # tracer_<COND>*.out it finds.
-# COND is edep (default), const2e-18 or const1.5e-19.
+# COND is edep (default), table-central, table-low, table-high, const2e-18 or
+# const1.5e-19.
 
 set -uo pipefail
 cd "$SLURM_SUBMIT_DIR"
 : "${SCCM:?}"; : "${SEED:?}"; NPART="${NPART:-2000}"; COND="${COND:-edep}"
 case "$COND" in
-  edep) A="" ;;
+  edep) A="--sigma-model edep" ;;   # 1/v-with-floor model (default before 55b5f6b)
+  table-central|table-low|table-high)   # computed BaF+-Ne table (tracer default since 55b5f6b)
+        A="--sigma-model table --sigma-table-variant ${COND#table-}" ;;
   const2e-18) A="--sigma-energy-dependent 0 --sigma 2.0e-18" ;;
   const1.5e-19) A="--sigma-energy-dependent 0 --sigma 1.5e-19" ;;
   *) echo "unknown COND $COND"; exit 2 ;;

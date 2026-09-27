@@ -209,6 +209,62 @@ in an empty gap between two populations:
 - sbatch_fluor3d_tracer_chunk.sh.
 - Login-node drivers fluor3d_{scan,stats,peak}_driver.sh.
 
+### Computed cross-section table (2026-09-27, commit 55b5f6b)
+
+**Setup.**
+- Same frozen neon fields, re-traced with the new tracer default
+  `--sigma-model table`: the computed BaF+-Ne sigma_t(E_cm) in
+  tracer/data/bafplus_ne_sigma_tracer.tsv.
+- Three variants: central (the main condition), low and high. Low and high
+  bracket the short-range wall, which matters above ~1 eV.
+- Flows: 5, 10, 15 and 20 SCCM as requested, plus central at 25 and 30 SCCM
+  to locate the peak.
+- Statistics: >= 300 extracted ions per flow for central, >= 150 for low
+  and high.
+- `--sigma-model edep` under the new code reproduces the earlier scan
+  bit-for-bit, so the table above still stands for that model.
+
+| Flow (SCCM) | table central (95% CI; extracted/traced) | table low | table high | edep (previous model) | central: back out inlet | central: median pump-out |
+|---|---|---|---|---|---|---|
+| 5 | 3.20% (2.9-3.6; 320/10000) | 5.89% | 2.11% | 1.02% | 0% | hot ions, us |
+| 10 | 4.58% (4.2-5.0; 550/12000) | 6.90% | 3.02% | 1.45% | 0% | 17.7 ms |
+| 15 | 6.48% (5.8-7.2; 311/4800) | 8.67% | 4.25% | 2.60% | 1% | 39.2 ms |
+| 20 | **8.62% (7.9-9.5; 414/4800)** | 12.58% | 6.65% | 3.20% | 5% | 43.9 ms |
+| 25 | **8.56% (7.7-9.5; 308/3600)** | - | - | 2.09% | 8% | 50.6 ms |
+| 30 | 5.60% (4.9-6.4; 224/4000) | - | - | 0.53% | 24% | 65.6 ms |
+
+**What changes relative to edep:**
+- **Extraction is 2-4x higher at every flow.** The central table peaks at
+  ~8.6% over 20-25 SCCM, vs edep's ~3.5% at 17-18 SCCM, so the peak moves
+  up in flow.
+- **Mechanism: stopping depth.** sigma_t is much smaller than edep at high
+  energy (4.9e-20 m^2 at 500 eV lab, vs edep's 1.5e-19 floor), so injected
+  ions stop deeper in the chamber: ~14 vs 8.8 mm in the commit's synthetic
+  check.
+  - Deeper, they are farther from the molecule-inlet port, so fewer are
+    blown back out: 5% at 20 SCCM (table) vs 21% (edep).
+  - They are also closer to the outlet flow.
+  - The low variant (weakest short-range wall) penetrates deepest and
+    extracts the most (12.6% at 20 SCCM). The high variant extracts least
+    (6.7%).
+- **The thermal end is the same in both models** (2.0e-18 m^2), so from
+  10 SCCM up essentially all extracted ions leave thermalized in every
+  variant.
+- **At 5 SCCM only 35% of central-table "extracted" ions are thermalized**
+  (1.1% of injected). The rest coast straight through while still hot: the
+  smaller high-energy sigma lets more ions stay fast at low density.
+  Thermalized-only fractions at 5 SCCM: low 0.50%, central 1.12%,
+  high 1.74%.
+- **The spread is set by the short-range wall:** central 8.6%, bracketed by
+  6.7-12.6% at 20 SCCM. It is not set by statistics. No BaF+-Ne cross
+  section has been measured; Ba+ stands in for BaF+.
+
+**Figures:**
+- results/figures/fluor3d_scan_table_{extraction,pumpout,energy}.png, from
+  `python tools/plot_fluor3d_scan.py --set table`.
+- The extraction plot shows the three table variants, the central
+  thermalized-only curve, and edep as a gray dashed reference.
+
 # Original (leaky-field) results
 
 Follow-up to `docs/hpc-fluor-cell-3d-molecules-handoff.md`, working through its
