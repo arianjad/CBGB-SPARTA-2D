@@ -5,8 +5,8 @@
 # FILLN), where the 23K Ne mean free path is ~0.4mm; the flat 3.25-3.33mm
 # grid would be ~9 mean free paths per cell, so region CAV (the chamber and
 # both port channels) is refined to ~0.41mm cells. Exterior stays coarse
-# (lambda there is >10mm). Averaging window is 10 x 5000 = DUMPFREQ steps,
-# so pass DUMPFREQ 50000 and CHECKPOINT_STEPS a multiple of it.
+# (lambda there is >10mm). Averaging window is 10 x DUMPFREQ/10 = DUMPFREQ steps,
+# so pass CHECKPOINT_STEPS = DUMPFREQ (restarts must land on window edges).
 #
 # Checkpointed production run of the fluor-cell-3d case, mirroring
 # cases/takahashi-3d/in.he_takahashi_3d_run's chunked restart pattern.
@@ -57,7 +57,8 @@ fix         amo ave/surf moleculeout 10 100 1000 c_cmo[1]
 dump        dmo surf moleculeout 1000 moleculeout.out id f_amo
 compute     cg grid all negas nrho u v w
 compute     tg thermal/grid all negas temp
-fix         ag ave/grid all 10 5000 ${DUMPFREQ} c_cg[*] c_tg[*]
+variable    NREP equal ${DUMPFREQ}/10
+fix         ag ave/grid all 10 ${NREP} ${DUMPFREQ} c_cg[*] c_tg[*]
 dump        gd grid all ${DUMPFREQ} field.grid id xc yc zc xlo ylo zlo xhi yhi zhi f_ag[*]
 stats       5000
 stats_style step cpu np nattempt ncoll f_src[1] f_src[2]

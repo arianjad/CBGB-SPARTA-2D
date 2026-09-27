@@ -240,3 +240,29 @@ def resolved_dt(run_dir: str | Path, explicit_dt: float | None = None) -> float:
 
 def write_frame(frame: Frame, path: str | Path) -> None:
     Path(path).write_bytes(frame.raw.encode("utf-8"))
+
+
+def read_tail_frames(path: str | Path, k: int) -> tuple[Frame, ...]:
+    """The last k complete, non-empty frames (first copy of each timestep), reading
+    only enough of the file's tail for them. Frame size is estimated from
+    the first frame, with margin; the tail read grows until k are in hand."""
+    source = Path(path)
+    size = source.stat().st_size
+    with open(source, "rb") as fh:
+        head = fh.read(min(size, 1 << 30))
+    second = head.find(b"ITEM: TIMESTEP", 1)
+    frame_bytes = second if second > 0 else size
+    want = int(frame_bytes * (k + 1.5))
+    while True:
+        frames = read_complete_frames(source, tail_bytes=want if want < size else None).frames
+        seen, uniq = set(), []
+        for f in frames:
+            # a resumed run re-dumps its start step with an all-zero average;
+            # its real twin may lie just outside this tail window, so drop
+            # empty frames outright rather than relying on first-copy dedupe
+            if f.timestep not in seen and np.any(f.data[:, 10:] != 0):
+                seen.add(f.timestep)
+                uniq.append(f)
+        if len(uniq) >= k or want >= size:
+            return tuple(uniq[-k:])
+        want *= 2

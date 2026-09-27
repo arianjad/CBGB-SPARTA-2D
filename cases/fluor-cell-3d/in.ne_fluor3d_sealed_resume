@@ -1,4 +1,4 @@
-# Resume for in.ne_fluor3d_sealed_run (10 x 5000 averaging window, DUMPFREQ 50000).
+# Resume for in.ne_fluor3d_sealed_run (averaging window = DUMPFREQ; restart on a window edge).
 #
 # Resume in.ne_fluor3d_run from a SPARTA restart file after a job was killed
 # (walltime limit, node failure) before finishing. Mirrors
@@ -30,7 +30,8 @@ dump        dmo surf moleculeout 1000 moleculeout.out id f_amo
 dump_modify dmo append yes
 compute     cg grid all negas nrho u v w
 compute     tg thermal/grid all negas temp
-fix         ag ave/grid all 10 5000 ${DUMPFREQ} c_cg[*] c_tg[*]
+variable    NREP equal ${DUMPFREQ}/10
+fix         ag ave/grid all 10 ${NREP} ${DUMPFREQ} c_cg[*] c_tg[*]
 dump        gd grid all ${DUMPFREQ} field.grid id xc yc zc xlo ylo zlo xhi yhi zhi f_ag[*]
 dump_modify gd append yes
 stats       5000

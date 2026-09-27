@@ -34,7 +34,11 @@ def tail_average(path, frac):
     size = os.path.getsize(path)
     tail_bytes = max(int(size * min(1.0, frac * 1.5 + 0.05)), 8 * 1024 * 1024)
     frames = read_complete_frames(path, tail_bytes=tail_bytes if tail_bytes < size else None).frames
-    k = max(1, int(round(len(frames) * frac)))
+    # a resumed run re-dumps its starting step with an empty average; keep the first copy
+    seen = set()
+    frames = [f for f in frames if not (f.timestep in seen or seen.add(f.timestep))]
+    # frac is a fraction of the WHOLE run's frames; only a tail was read
+    k = max(1, min(len(frames), int(round(len(frames) * size / min(tail_bytes, size) * frac))))
     frames = frames[-k:]
     ref = None
     total = None

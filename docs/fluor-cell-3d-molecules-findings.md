@@ -122,6 +122,93 @@ hit a wall before thermalizing.
 Scripts used (classifier, half-space asymmetry analysis) are in
 `tools/fluor3d_asymmetry.py` and `tools/tracer_classify3d.py`.
 
+## Flow-rate scan, sealed cell (2026-09-23 to 26)
+
+### Setup
+
+**Neon.** 18 flows from 1 to 58 SCCM, each an independent sealed-cell run of
+0.3 s simulated.
+- Same deck as 4 SCCM (`in.ne_fluor3d_sealed_run`, 8x8x8-refined chamber at
+  0.41mm).
+- MDOT, the aperture-law initial fill and FNUM all scale with SCCM, so each
+  run has ~1M particles.
+- DT is <= ~0.5 x the Ne-Ne collision time. Per-flow values are in
+  `tools/wsl/fluor3d_flow_params.sh`.
+- Every flow settled: 23 K, a symmetric plume, and a chamber density that
+  rises almost linearly with flow (1.6e21 at 1 SCCM to 7.3e22 m^-3 at
+  58 SCCM).
+- 127 SCCM was also run but is excluded: ions don't leave via the outlet
+  there.
+- **From 10 SCCM up the chamber grid is coarser than twice the Ne mean free
+  path**, so the port flow there is approximate.
+
+**Tracer.** 500 eV BaF+ injected at the molecule-inlet port into each frozen
+field (the last 20 ms time-averaged).
+- The three cross-section conditions from handoff section 3 (commit
+  5bca552). The table below is the energy-dependent default.
+- Both constant-sigma bounds give ~0% extracted at every flow from 4 SCCM
+  up.
+- Ions were added until >= 150 were extracted per flow, and >= 600 across
+  15-21 SCCM (+-8% at 95%).
+
+**Thermalized** means < 0.1 eV kinetic energy at the box exit. That cut sits
+in an empty gap between two populations:
+- Gas-entrained cold ions, 10-30 meV. The lab-frame energy is mostly the
+  ~120-175 m/s forward drift in the neon jet.
+- Ions that never cooled, 1-400 eV.
+
+### Results (energy-dependent sigma)
+
+| Flow (SCCM) | ions traced | extracted, all (95% CI) | extracted, thermalized | back out inlet | median pump-out time | median exit energy |
+|---|---|---|---|---|---|---|
+| 1 | 19000 | 8.55% (8.16-8.95) | 0.00% | 0% | 3.4 us | 178 eV |
+| 2 | 19000 | 1.25% (1.10-1.42) | 0.04% | 0% | 9.1 us | 10 eV |
+| 4 | 21000 | 0.72% (0.61-0.84) | 0.70% | 0% | 3.8 ms | 15 meV |
+| 5 | 20000 | 1.02% (0.89-1.17) | 1.01% | 0% | 8.3 ms | 15 meV |
+| 8 | 15000 | 1.03% (0.88-1.20) | 1.03% | 1% | 26.5 ms | 18 meV |
+| 10 | 11000 | 1.45% (1.24-1.69) | 1.45% | 1% | 32.7 ms | 19 meV |
+| 15 | 24600 | 2.60% (2.41-2.80) | 2.60% | 6% | 48.0 ms | 22 meV |
+| 16 | 18800 | 3.21% (2.96-3.47) | 3.21% | 7% | 47.5 ms | 22 meV |
+| **17** | 18800 | **3.48% (3.23-3.76)** | 3.48% | 8% | 46.7 ms | 22 meV |
+| **18** | 18800 | **3.43% (3.17-3.70)** | 3.43% | 12% | 51.0 ms | 23 meV |
+| 19 | 18800 | 3.30% (3.05-3.56) | 3.30% | 16% | 51.0 ms | 23 meV |
+| 20 | 19200 | 3.20% (2.96-3.46) | 3.20% | 21% | 50.2 ms | 23 meV |
+| 21 | 26700 | 2.45% (2.27-2.64) | 2.45% | 25% | 55.5 ms | 24 meV |
+| 22 | 6300 | 2.65% (2.28-3.08) | 2.65% | 27% | 58.8 ms | 23 meV |
+| 23 | 5900 | 2.83% (2.44-3.29) | 2.83% | 35% | 50.4 ms | 25 meV |
+| 25 | 8700 | 2.09% (1.81-2.41) | 2.09% | 42% | 54.0 ms | 25 meV |
+| 30 | 30850 | 0.53% (0.46-0.62) | 0.53% | 72% | 70.3 ms | 25 meV |
+| 58 | 10200 | 0.00% (0.00-0.04) | 0.00% | 99% | - | - |
+
+### Reading it
+
+- **1-2 SCCM:** the "extraction" is hot ions coasting straight through in
+  microseconds, not a beam.
+- **From 4 SCCM up:** every extracted ion leaves thermalized, carried out by
+  the neon flow over milliseconds.
+- **Peak:** extraction rises from ~1% (4-8 SCCM) to a broad maximum of
+  3.2-3.5% at 16-20 SCCM, highest at 17-18 SCCM (statistically tied).
+- **Past the peak:** extraction falls steeply. The outflowing neon increasingly
+  blows the ions back out the molecule-inlet port: 8% at 17 SCCM, 72% at 30,
+  99% at 58. So the optimum is set by that competition, not by diffusion to
+  the walls.
+- **21 SCCM** sits ~2 sigma below 20 and 22. It is likely a statistical or
+  frozen-field fluctuation rather than structure.
+- **Pump-out time** (injection to outlet) grows from ~4 ms at 4 SCCM to
+  ~50 ms at the peak.
+
+**Figures** (not in git; results/ is ignored):
+- results/figures/fluor3d_scan_{extraction,pumpout,energy}.png and
+  _summary.csv, from `tools/plot_fluor3d_scan.py`.
+- A trajectory GIF of 40 ions at 17 SCCM in results/figures/fluor3d_traj/,
+  from `tools/render_fluor3d_trajectories.py`.
+
+**Pipeline** (in tools/wsl/):
+- sbatch_fluor3d_scan.sh: neon run, self-chaining, preemption-safe.
+- sbatch_fluor3d_scan_post.sh: asymmetry check + field freeze.
+- sbatch_fluor3d_tracer_chunk.sh.
+- Login-node drivers fluor3d_{scan,stats,peak}_driver.sh.
+
 # Original (leaky-field) results
 
 Follow-up to `docs/hpc-fluor-cell-3d-molecules-handoff.md`, working through its
