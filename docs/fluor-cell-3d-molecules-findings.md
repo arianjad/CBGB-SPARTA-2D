@@ -265,6 +265,51 @@ in an empty gap between two populations:
 - The extraction plot shows the three table variants, the central
   thermalized-only curve, and edep as a gray dashed reference.
 
+### Thermal-injection test (2026-09-27)
+
+**Setup.** BaF+ is injected already at the neon temperature: a 23 K
+Maxwellian, no 500 eV beam (`--vx 0 -T 23`).
+- Cross section: a single constant sigma = 1.93e-18 m^2.
+- Neon fields: the same frozen 5-30 SCCM fields.
+- Start points: three depths on the port axis
+  (sbatch_fluor3d_tracer_chunk.sh COND=thermal-const1.93e-18[-x42|-mid]):
+  - Inlet channel exit (x = 31.8mm). The literal "comes in thermalized".
+    The outer port face at 30.48mm would send half the ions straight back
+    out.
+  - 10mm into the chamber (x = 41.8mm), about where 500 eV ions stop.
+  - Chamber centre (x = 54.5mm), like molecules born inside the cell.
+
+| Flow (SCCM) | centre: extracted (95% CI) | centre: median pump-out | 10mm in: extracted | 10mm in: back out inlet | inlet exit: extracted | inlet exit: back out inlet | 500 eV, table central | 500 eV, edep |
+|---|---|---|---|---|---|---|---|---|
+| 5 | 1.01% (0.90-1.13) | 16 ms | 0.25% | 4% | 0% (<0.04) | 95% | 3.20% | 1.02% |
+| 10 | 5.43% (4.90-6.02) | 25 ms | 1.66% | 3% | 0% (<0.06) | 100% | 4.58% | 1.45% |
+| 15 | 12.62% (11.4-14.0) | 30 ms | 3.58% | 4% | 0% (<0.05) | 100% | 6.48% | 2.60% |
+| 20 | 22.96% (21.4-24.6) | 29 ms | 8.28% | 4% | 0% (<0.05) | 100% | 8.62% | 3.20% |
+| 25 | 26.83% (25.1-28.6) | 32 ms | 10.42% | 2% | 0% (<0.05) | 100% | 8.56% | 2.09% |
+| 30 | **34.30% (32.3-36.4)** | 37 ms | 10.65% | 5% | 0% (<0.06) | 100% | 5.60% | 0.53% |
+
+**Reading it:**
+- **Starting at the inlet, nothing gets out.**
+  - The neon leaving through the molecule-inlet port sweeps a thermal ion
+    straight back out, within ~0.1 ms.
+  - A 500 eV ion only escapes this because it coasts several mm into the
+    chamber before cooling.
+- **So the injection depth, not the cross section, dominates extraction.**
+  - A thermal ion 10mm in behaves much like the 500 eV edep/table runs:
+    about 8-10% at 20-30 SCCM.
+  - A thermal ion at the chamber centre is extracted far more often: 23% at
+    20 SCCM and still rising to 34% at 30 SCCM, with no peak in this range.
+  - It starts away from the inlet backflow and close to the outlet flow.
+- **Why the 500 eV curves peak:** the peak at ~17-25 SCCM comes from ions
+  that stop near the inlet being blown back out at high flow. Ions
+  starting deeper don't see that loss, so their extraction keeps climbing
+  with flow as diffusion to the walls slows.
+- **Pump-out times are shorter than the 500 eV runs** (16-37 ms, vs
+  ~45-65 ms), because the ions start closer to the outlet.
+
+**Figures:** results/figures/fluor3d_scan_thermal_{extraction,pumpout,energy}.png,
+from `python tools/plot_fluor3d_scan.py --set thermal`.
+
 # Original (leaky-field) results
 
 Follow-up to `docs/hpc-fluor-cell-3d-molecules-handoff.md`, working through its

@@ -47,7 +47,12 @@ CONDSETS = {  # (file tag, label, categorical slot colour -- reference palette s
         ("table-high", "computed σ table, high variant", "#1baf7a"),
     ],
 }
-REF = ("edep", "energy-dependent σ (previous model)", "#9a9994")   # neutral reference line for --set table
+CONDSETS["thermal"] = [  # test: BaF+ injected already at 23 K (no beam), constant 1.93e-18 m^2
+    ("thermal-const1.93e-18-mid", "thermal start, chamber centre (x = 54.5 mm)", "#2a78d6"),
+    ("thermal-const1.93e-18-x42", "thermal start, 10 mm in (x = 41.8 mm)", "#eb6834"),
+    ("thermal-const1.93e-18", "thermal start, inlet channel exit (x = 31.8 mm)", "#1baf7a"),
+]
+REF = ("edep", "500 eV injection, energy-dependent σ (previous model)", "#9a9994")   # neutral reference line
 CONDS = CONDSETS["edep"]
 INK, INK2, GRID, SURF = "#0b0b0b", "#52514e", "#e4e3df", "#fcfcfb"
 M_BAF, EV = 156.325 * 1.66054e-27, 1.602177e-19
@@ -162,10 +167,11 @@ def main():
             continue
         f = np.array([x["sccm"] for x in d]); p = np.array([x["frac"] for x in d]) * 100
         lo = np.array([x["lo"] for x in d]) * 100; hi = np.array([x["hi"] for x in d]) * 100
-        ax.errorbar(f, p, yerr=[p - lo, hi - p], color=col, lw=2, marker="o", ms=6, capsize=3,
+        ax.errorbar(f, p, yerr=[np.clip(p - lo, 0, None), np.clip(hi - p, 0, None)], color=col, lw=2,
+                    marker="o", ms=6, capsize=3,
                     elinewidth=1, mec=SURF, mew=1.5, label=label, zorder=3)
         ends.append((p[-1], f[-1], label.split(" (")[0]))
-        if tag == primary:   # same condition, counting only ions that left thermalized
+        if tag == primary and a.set != "thermal":   # same condition, counting only ions that left thermalized
             k = np.array([(energies[x["sccm"]] < E_THERMAL).sum() for x in d])
             n = np.array([x["n"] for x in d])
             w = np.array([wilson(kk, nn) for kk, nn in zip(k, n)]) * 100
@@ -195,13 +201,15 @@ def main():
     ax.set_ylim(bottom=0)
     if UNDER_RESOLVED:   # one band: every flow >= 10 SCCM is under-resolved
         ax.axvspan(min(UNDER_RESOLVED) / 1.08, xhi, color=GRID, alpha=0.5, lw=0, zorder=0)
-    ax.set_title("BaF⁺ extraction fraction vs. flow (500 eV injection, sealed cell)", color=INK, fontsize=11, loc="left",
+    ax.set_title("BaF⁺ extraction fraction vs. flow (" + ("thermal injection test" if a.set == "thermal" else "500 eV injection") + ", sealed cell)", color=INK, fontsize=11, loc="left",
                  pad=12 + 13 * int(np.ceil(len(ax.get_legend_handles_labels()[0]) / 2)))
     ax.legend(frameon=False, fontsize=8, labelcolor=INK2, loc="lower left", bbox_to_anchor=(0, 1.0), ncol=2,
               handlelength=1.8, columnspacing=1.2)
     fig.text(0.01, 0.01, "Error bars: 95% Wilson interval. Shaded (>= 10 SCCM): chamber grid coarser than twice the Ne\n"
              "mean free path, so port flow is approximate. " +
              ("1-2 SCCM extraction is hot ions flying straight through." if not ref else
+              "Ions start as a 23 K Maxwellian (no beam) with constant\nσ = 1.93e-18 m², on the port axis at three depths."
+              if a.set == "thermal" else
               "Dashed blue: ions leaving thermalized\n(< 0.1 eV); the rest at low flow are hot ions coasting straight through."),
              fontsize=7.5, color=INK2)
     fig.tight_layout(rect=(0, 0.08 if ref else 0.06, 1, 1))
