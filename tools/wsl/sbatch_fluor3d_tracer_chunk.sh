@@ -15,7 +15,7 @@
 # are independent samples; tools/plot_fluor3d_scan.py pools every
 # tracer_<COND>*.out it finds.
 # COND is edep (default), table-central, table-low, table-high, const2e-18,
-# const1.5e-19, or thermal-const1.93e-18 (thermal-injection test).
+# const1.5e-19, or thermal-const1.93e-18[-x42|-mid|-x66|-x75] (thermal-injection test).
 
 set -uo pipefail
 cd "$SLURM_SUBMIT_DIR"
@@ -29,15 +29,20 @@ case "$COND" in
         A="--sigma-model table --sigma-table-variant ${COND#table-}" ;;
   const2e-18) A="--sigma-energy-dependent 0 --sigma 2.0e-18" ;;
   const1.5e-19) A="--sigma-energy-dependent 0 --sigma 1.5e-19" ;;
-  thermal-const1.93e-18|thermal-const1.93e-18-x42|thermal-const1.93e-18-mid)
+  thermal-const1.93e-18|thermal-const1.93e-18-x42|thermal-const1.93e-18-mid|thermal-const1.93e-18-x66|thermal-const1.93e-18-x75)
         # test: BaF+ already at the Ne temperature (23 K Maxwellian, no beam),
-        # constant 1.93e-18 m^2, on the port axis. Start point:
+        # constant 1.93e-18 m^2, on the port axis. The chamber spans
+        # x=31.75mm (inlet channel end) to 77.22mm (outlet aperture plane,
+        # 3.175mm hole on the same axis). Start point:
         #   (no suffix) at the inlet channel's inner end (x=31.8mm): swept back
         #       out by the neon leaving through the inlet port
         #   -x42  10mm into the chamber (x=41.8mm), ~where 500 eV ions stop
         #   -mid  chamber centre (x=54.5mm), like molecules born in the cell
+        #   -x66  3/4 of the way through the chamber (x=65.9mm)
+        #   -x75  2mm upstream of the outlet aperture (x=75.2mm)
         A="--sigma-model const --sigma 1.93e-18"; VX=0; TSPAWN=23
-        case "$COND" in *-x42) SPAWN_X=0.0418 ;; *-mid) SPAWN_X=0.0545 ;; *) SPAWN_X=0.0318 ;; esac ;;
+        case "$COND" in *-x42) SPAWN_X=0.0418 ;; *-mid) SPAWN_X=0.0545 ;; *-x66) SPAWN_X=0.0659 ;;
+                        *-x75) SPAWN_X=0.0752 ;; *) SPAWN_X=0.0318 ;; esac ;;
   *) echo "unknown COND $COND"; exit 2 ;;
 esac
 RUNDIR="$HOME/orcd/scratch/cbgb-sparta-3d/fluor-scan/sccm$SCCM"

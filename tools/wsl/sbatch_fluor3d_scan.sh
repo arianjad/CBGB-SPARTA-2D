@@ -38,6 +38,8 @@
 #   flow, whichever partition starts first; a job finding the lock held by
 #   another live job re-queues itself for 30 min later, so the chain
 #   survives if that other job dies (e.g. a mit_normal walltime kill).
+# - EXCLUDE=<nodes> is passed to every job in the chain (slow nodes). It goes
+#   through --export, which splits on commas: use a range like node[2000-2027].
 # - Resumes from the newest complete checkpoint and trims field.grid back
 #   to that step first, so a preempted, requeued or timed-out job never
 #   leaves stray frames.
@@ -70,8 +72,8 @@ resubmit() {  # $1 = extra sbatch args (e.g. a --begin delay)
   local next i
   for i in $(seq 60); do   # retry up to 30 min: quicktest caps queued jobs at 8/user
     next=$(cd "$SLURM_SUBMIT_DIR" && sbatch --parsable --partition="$SLURM_JOB_PARTITION" --nice="${NICE:-0}" \
-           --time="${CHAIN_TIME:-00:15:00}" $1 \
-           --export=ALL,SCCM="$SCCM",MAXCHUNKS="$MAXCHUNKS",NICE="${NICE:-0}",CHAIN_TIME="${CHAIN_TIME:-00:15:00}" "$SCRIPT") && break
+           --time="${CHAIN_TIME:-00:15:00}" ${EXCLUDE:+--exclude=$EXCLUDE} $1 \
+           --export=ALL,SCCM="$SCCM",MAXCHUNKS="$MAXCHUNKS",NICE="${NICE:-0}",CHAIN_TIME="${CHAIN_TIME:-00:15:00}",EXCLUDE="${EXCLUDE:-}" "$SCRIPT") && break
     sleep 30
   done
   echo "$(date) job $SLURM_JOB_ID: queued next ${next:-FAILED}" | tee -a "$RUNDIR/scan.log"

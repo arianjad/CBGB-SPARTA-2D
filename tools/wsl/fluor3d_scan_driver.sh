@@ -3,7 +3,7 @@
 # As each flow's neon run completes (restart.base.<TOTAL> exists), submit its
 # field prep (sbatch_fluor3d_scan_post.sh, NPART=0), then its tracer jobs
 # (sbatch_fluor3d_tracer_chunk.sh on mit_preemptable, 40 threads, 1 h), and
-# replot once everything is finished. Idempotent via marker files in each
+# replot once everything is finished (PREP_ONLY=1: field prep only). Idempotent via marker files in each
 # post/ dir (.prep_submitted, .tracer_submitted: the job ids), so it can be
 # killed and restarted at any point. Polls every 5 min; only runs squeue/ls.
 #   nohup bash tools/wsl/fluor3d_scan_driver.sh > fluor3d_scan_driver.log 2>&1 &
@@ -38,6 +38,10 @@ while true; do
         echo "$(date) $F SCCM prep $prep finished without frozen.grid -- resubmitting"
         rm -f "$P/.prep_submitted"; alldone=0; continue
       fi
+      # PREP_ONLY=1: stop at the frozen field (tracers come from fluor3d_stats_driver.sh)
+      if [ "${PREP_ONLY:-0}" = 1 ]; then
+        : > "$P/.tracer_submitted"; echo "$(date) $F SCCM frozen field ready"; continue
+      fi
       ids=$(sbatch --parsable $TOPT --export=ALL,SCCM=$F,SEED=201,NPART=$(nedep $F) $TR)
       for c in const2e-18 const1.5e-19; do
         ids="$ids $(sbatch --parsable $TOPT --export=ALL,SCCM=$F,SEED=42,NPART=1000,COND=$c $TR)"
@@ -51,6 +55,7 @@ while true; do
   [ "$alldone" = 1 ] && break
   sleep 300
 done
+[ "${PREP_ONLY:-0}" = 1 ] && exit 0
 source .venv/bin/activate
 python tools/plot_fluor3d_scan.py
 column -s, -t results/figures/fluor3d_scan_summary.csv | cut -c1-140

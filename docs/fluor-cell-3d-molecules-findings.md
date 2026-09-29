@@ -310,6 +310,83 @@ Maxwellian, no 500 eV beam (`--vx 0 -T 23`).
 **Figures:** results/figures/fluor3d_scan_thermal_{extraction,pumpout,energy}.png,
 from `python tools/plot_fluor3d_scan.py --set thermal`.
 
+### Thermal injection deeper in, and at higher flow (2026-09-29 overnight)
+
+**Setup.** Same thermal condition as above: a 23 K Maxwellian with constant
+sigma = 1.93e-18 m^2, on the port axis. Two changes:
+- Two more start points. The chamber spans x = 31.75 mm (inlet channel end)
+  to 77.22 mm (outlet aperture plane: a 3.175 mm hole on the same axis).
+  - 3/4 of the way through: x = 65.9 mm (COND suffix `-x66`).
+  - 2 mm upstream of the outlet aperture: x = 75.2 mm (`-x75`).
+- Higher flows, to look for a peak:
+  - New neon runs at 40, 45 and 50 SCCM, same recipe as the scan, 0.3 s each.
+  - The existing 58 SCCM field.
+  - The existing 127 SCCM field, as an upper bracket. It was dropped earlier
+    only for the 500 eV runs.
+- Statistics: at least 300 extracted per point where affordable, capped at
+  10,000 ions traced.
+  - 10mm-in at 127 SCCM stopped at 122 extracted: each ion takes minutes
+    there.
+  - Earlier points keep their counts from the 2026-09-27 run.
+
+**Extracted % (95% Wilson interval); median pump-out time for extracted ions:**
+
+| Flow (SCCM) | 2 mm before outlet | 3/4 through | centre | 10 mm in |
+|---|---|---|---|---|
+| 5 | 26.6% (24.7-28.6); 0.62 ms | 4.5% (4.1-5.0); 6.1 ms | 1.0% (0.9-1.1); 16 ms | 0.25% (0.2-0.3); 28 ms |
+| 10 | 57.4% (54.6-60.2); 0.57 ms | 17.0% (15.6-18.6); 8.0 ms | 5.4% (4.9-6.0); 25 ms | 1.7% (1.5-1.8); 41 ms |
+| 15 | 72.7% (68.6-76.5); 0.56 ms | 33.6% (30.7-36.7); 8.5 ms | 12.6% (11.4-14.0); 30 ms | 3.6% (3.2-4.0); 49 ms |
+| 20 | 87.1% (83.8-89.8); 0.53 ms | 47.0% (43.8-50.1); 7.0 ms | 23.0% (21.4-24.6); 29 ms | 8.3% (7.5-9.2); 50 ms |
+| 25 | 92.7% (90.0-94.7); 0.57 ms | 58.1% (55.0-61.2); 6.8 ms | 26.8% (25.1-28.6); 32 ms | 10.4% (9.5-11.5); 52 ms |
+| 30 | 95.8% (93.3-97.3); 0.55 ms | 66.0% (62.6-69.2); 7.3 ms | 34.3% (32.3-36.4); 37 ms | 10.7% (9.7-11.6); 65 ms |
+| 40 | 98.2% (97.2-98.9); 0.54 ms | 73.4% (70.6-76.0); 6.1 ms | 50.9% (47.4-54.3); 27 ms | 15.3% (13.9-16.7); 56 ms |
+| 58 | 100% (99.0-100); 0.56 ms | 88.5% (85.0-91.3); 5.7 ms | 58.0% (54.0-61.9); 36 ms | 21.7% (19.6-23.9); 74 ms |
+| 127 | 100% (99.0-100); 0.58 ms | 97.0% (94.8-98.3); 6.3 ms | 86.3% (83.4-88.9); 24 ms | 21.8% (18.6-25.4); 60 ms |
+
+45 and 50 SCCM are pending their neon runs.
+
+**Reading it:**
+- **No extraction peak up to 127 SCCM for a thermal ion, from any start
+  point.** Every curve rises with flow, or saturates:
+  - Near the outlet: ~100% from 58 SCCM up.
+  - 10mm in: flat at ~22% between 58 and 127 SCCM.
+  - This matches the earlier reading. The 500 eV peak near 17-25 SCCM comes
+    from ions stopping near the inlet and being blown back out. A thermal
+    ion that starts downstream of that backflow only gains from more flow:
+    diffusion to the walls slows, and the outflow toward the outlet gets
+    stronger.
+- **Start point matters more than flow.** At 20 SCCM, extraction runs 87%,
+  47%, 23% and 8% going from 2mm before the outlet back to 10mm in.
+  - Wall losses dominate everywhere except near the outlet.
+  - Only the 10mm-in start loses ions back out of the inlet: 2-5% at
+    5-30 SCCM, 6-7% at 40-58 and 21% at 127. That is what flattens its
+    curve at the top.
+- **Pump-out time is set by distance, not flow.**
+  - 2mm before the outlet: ~0.55 ms at every flow.
+  - 3/4 through: 6-8 ms.
+  - Centre: 25-37 ms.
+  - 10mm in: 50-75 ms.
+- **Caveat.** Everything at or above ~10 SCCM is on the 0.41mm chamber grid,
+  which is coarser than the neon mean free path there (shaded in the plot).
+  At 23 SCCM and up it is well under-resolved, and 127 SCCM is only a
+  qualitative bracket. The port jets are approximate, but the stagnant
+  chamber state is fine.
+
+**Pipeline notes.**
+- sbatch_fluor3d_tracer_chunk.sh gained the `-x66` and `-x75` start points.
+- fluor3d_stats_driver.sh gained env options:
+  - TOPT: several ';'-separated option sets, rotated per chunk.
+  - CHUNKSCALE, PERFLOW, MINCHUNK.
+- fluor3d_scan_driver.sh: PREP_ONLY=1 stops at the frozen field.
+- sbatch_fluor3d_scan.sh: EXCLUDE is passed through the whole chain. Use a
+  comma-free range such as `node[2000-2027]`, because --export splits on
+  commas.
+- Scheduling lessons:
+  - Preemptable/normal node20xx nodes ran a 60000-step neon window in
+    >30 min, vs 6-11 min on node14xx/16xx/19xx. The neon chains exclude them.
+  - Short 30-min jobs on preemptable and normal started within minutes,
+    even though `sbatch --test-only` estimated 1-2 days.
+
 # Original (leaky-field) results
 
 Follow-up to `docs/hpc-fluor-cell-3d-molecules-handoff.md`, working through its

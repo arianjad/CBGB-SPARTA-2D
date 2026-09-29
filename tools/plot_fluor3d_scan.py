@@ -32,8 +32,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from tracer_classify3d import classify, load  # noqa: E402
 
 BASE = os.path.expanduser("~/orcd/scratch/cbgb-sparta-3d")
-EXCLUDE = {127}   # dropped: ions don't leave through the outlet there
-FLOWS = sorted({4} | {int(d[4:]) for d in os.listdir(f"{BASE}/fluor-scan") if d.startswith("sccm")} - EXCLUDE)
+EXCLUDE = {127}   # dropped for the 500 eV sets: ions don't leave through the outlet there
+                  # (kept for the thermal set, as an upper bracket)
+FLOWS_ALL = sorted({4} | {int(d[4:]) for d in os.listdir(f"{BASE}/fluor-scan") if d[4:].isdigit()})
+FLOWS = [f for f in FLOWS_ALL if f not in EXCLUDE]
 UNDER_RESOLVED = {f for f in FLOWS if f >= 10}   # Ne mean free path < half the 0.41mm chamber cell
 CONDSETS = {  # (file tag, label, categorical slot colour -- reference palette slots 1-3); first = primary
     "edep": [
@@ -51,6 +53,8 @@ CONDSETS["thermal"] = [  # test: BaF+ injected already at 23 K (no beam), consta
     ("thermal-const1.93e-18-mid", "thermal start, chamber centre (x = 54.5 mm)", "#2a78d6"),
     ("thermal-const1.93e-18-x42", "thermal start, 10 mm in (x = 41.8 mm)", "#eb6834"),
     ("thermal-const1.93e-18", "thermal start, inlet channel exit (x = 31.8 mm)", "#1baf7a"),
+    ("thermal-const1.93e-18-x66", "thermal start, 3/4 through (x = 65.9 mm)", "#eda100"),        # slot 4
+    ("thermal-const1.93e-18-x75", "thermal start, 2 mm before outlet (x = 75.2 mm)", "#e87ba4"),  # slot 5
 ]
 REF = ("edep", "500 eV injection, energy-dependent σ (previous model)", "#9a9994")   # neutral reference line
 CONDS = CONDSETS["edep"]
@@ -116,8 +120,10 @@ def main():
                     help="which cross-section conditions to plot (default edep: the original scan)")
     ap.add_argument("--out", default=None, help="output prefix (default results/figures/fluor3d_scan[_table])")
     a = ap.parse_args()
-    global CONDS
+    global CONDS, FLOWS
     CONDS = CONDSETS[a.set]
+    if a.set == "thermal":
+        FLOWS = FLOWS_ALL
     primary = CONDS[0][0]
     ref = REF if a.set != "edep" else None
     if a.out is None:
@@ -130,6 +136,8 @@ def main():
         if ref and not glob.glob(f"{post_dir(f)}/tracer_{primary}*.out"):
             continue   # the table set only covers the flows it was run at
         for tag in tags:
+            if ref and tag == ref[0] and f in EXCLUDE:
+                continue
             files = sorted(glob.glob(f"{post_dir(f)}/tracer_{tag}.out") + glob.glob(f"{post_dir(f)}/tracer_{tag}_s*.out"))
             if not files:
                 continue
@@ -185,13 +193,14 @@ def main():
     ax.set_xlim(xlo, xhi)
     fig.canvas.draw()
     placed = []
+    px = fig.dpi / 72   # display pixels per point: positions are in pixels, offsets in points
     for y, x, text in sorted(ends):
         ypix = ax.transData.transform((x, y))[1]
         off = 0.0
-        while any(abs(ypix + off - q) < 11 for q in placed):
-            off += 11
+        while any(abs(ypix + off - q) < 11 * px for q in placed):
+            off += 11 * px
         placed.append(ypix + off)
-        ax.annotate(text, (x, y), xytext=(6, off), textcoords="offset points", va="center", fontsize=8, color=INK2)
+        ax.annotate(text, (x, y), xytext=(6, off / px), textcoords="offset points", va="center", fontsize=8, color=INK2)
     ticks = ([t for t in (1, 2, 4, 8, 15, 20, 30, 58) if FLOWS[0] <= t <= FLOWS[-1]] if not ref else plotted)
     ax.set_xticks(ticks)
     ax.set_xticklabels([str(t) for t in ticks])
@@ -208,7 +217,7 @@ def main():
     fig.text(0.01, 0.01, "Error bars: 95% Wilson interval. Shaded (>= 10 SCCM): chamber grid coarser than twice the Ne\n"
              "mean free path, so port flow is approximate. " +
              ("1-2 SCCM extraction is hot ions flying straight through." if not ref else
-              "Ions start as a 23 K Maxwellian (no beam) with constant\nσ = 1.93e-18 m², on the port axis at three depths."
+              "Ions start as a 23 K Maxwellian (no beam) with constant\nσ = 1.93e-18 m², on the port axis at five depths."
               if a.set == "thermal" else
               "Dashed blue: ions leaving thermalized\n(< 0.1 eV); the rest at low flow are hot ions coasting straight through."),
              fontsize=7.5, color=INK2)
