@@ -21,7 +21,7 @@ Writes:
                 (times, pos[ion, frame, xyz], alive[ion, frame], fate, walls path)
 
 Usage: python tools/render_fluor3d_trajectories.py TRAJ.out --surf SURF --out OUT
-         [--sccm 17] [--frames 160] [--tmin 1e-7] [--trail 6] [--xmax 0.11]
+         [--sccm 17] [--energy "500 eV"] [--frames 160] [--tmin 1e-7] [--trail 6] [--xmax 0.11]
 """
 import argparse
 import os
@@ -67,6 +67,7 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--k", type=int, default=40)
     ap.add_argument("--sccm", default="17", help="neon flow, for the plot labels only")
+    ap.add_argument("--energy", default="500 eV", help="injection energy, for the plot labels only")
     ap.add_argument("--frames", type=int, default=160)
     ap.add_argument("--tmin", type=float, default=1e-7)
     ap.add_argument("--trail", type=int, default=6)
@@ -126,7 +127,7 @@ def main():
         if m.sum() > 1:
             pl.add_mesh(pv.lines_from_points(pos[n, m]), color=FATES[names[fate[n]]], line_width=2)
     fate_key(pl)
-    pl.add_text(f"BaF+ paths, {a.sccm} SCCM Ne, 500 eV injection (log-time sampled)", font_size=11, color="#0b0b0b")
+    pl.add_text(f"BaF+ paths, {a.sccm} SCCM Ne, {a.energy} injection (log-time sampled)", font_size=11, color="#0b0b0b")
     pl.screenshot(a.out + "_paths.png")
     pl.close()
 
@@ -151,7 +152,7 @@ def main():
                     dyn.append(pl.add_mesh(pv.lines_from_points(seg), color=FATES[nm], line_width=2, opacity=0.6))
         t = times[f]
         label = f"t = {t*1e6:.2f} us" if t < 1e-3 else f"t = {t*1e3:.2f} ms"
-        dyn.append(pl.add_text(f"{label}   (log time)   {a.sccm} SCCM Ne, BaF+ injected at 500 eV; color = eventual fate",
+        dyn.append(pl.add_text(f"{label}   (log time)   {a.sccm} SCCM Ne, BaF+ injected at {a.energy}; color = eventual fate",
                                font_size=11, color="#0b0b0b", position="upper_left"))
         pl.write_frame()
     pl.close()
