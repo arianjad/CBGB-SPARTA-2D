@@ -319,14 +319,15 @@ sigma = 1.93e-18 m^2, on the port axis. Two changes:
   - 3/4 of the way through: x = 65.9 mm (COND suffix `-x66`).
   - 2 mm upstream of the outlet aperture: x = 75.2 mm (`-x75`).
 - Higher flows, to look for a peak:
-  - New neon runs at 40, 45 and 50 SCCM, same recipe as the scan, 0.3 s each.
+  - New neon runs at 40, 45 and 50 SCCM, same recipe as the scan, 0.3 s each
+    (tools/wsl/fluor3d_flow_params.sh rule: DT 1.2e-7, 1.1e-7 and 9.9e-8 s).
   - The existing 58 SCCM field.
   - The existing 127 SCCM field, as an upper bracket. It was dropped earlier
     only for the 500 eV runs.
 - Statistics: at least 300 extracted per point where affordable, capped at
   10,000 ions traced.
-  - 10mm-in at 127 SCCM stopped at 122 extracted: each ion takes minutes
-    there.
+  - Lower targets where ions are slow: 10mm in at 127 SCCM (127 extracted;
+    each ion takes minutes there) and at 50 SCCM (230).
   - Earlier points keep their counts from the 2026-09-27 run.
 
 **Extracted % (95% Wilson interval); median pump-out time for extracted ions:**
@@ -339,11 +340,16 @@ sigma = 1.93e-18 m^2, on the port axis. Two changes:
 | 20 | 87.1% (83.8-89.8); 0.53 ms | 47.0% (43.8-50.1); 7.0 ms | 23.0% (21.4-24.6); 29 ms | 8.3% (7.5-9.2); 50 ms |
 | 25 | 92.7% (90.0-94.7); 0.57 ms | 58.1% (55.0-61.2); 6.8 ms | 26.8% (25.1-28.6); 32 ms | 10.4% (9.5-11.5); 52 ms |
 | 30 | 95.8% (93.3-97.3); 0.55 ms | 66.0% (62.6-69.2); 7.3 ms | 34.3% (32.3-36.4); 37 ms | 10.7% (9.7-11.6); 65 ms |
-| 40 | 98.2% (97.2-98.9); 0.54 ms | 73.4% (70.6-76.0); 6.1 ms | 50.9% (47.4-54.3); 27 ms | 15.3% (13.9-16.7); 56 ms |
+| 40 | 98.2% (97.2-98.9); 0.54 ms | 73.4% (70.6-76.0); 6.1 ms | 50.9% (47.4-54.3); 27 ms | 15.2% (13.9-16.7); 56 ms |
+| 45 | 99.0% (98.2-99.5); 0.54 ms | 85.1% (82.8-87.2); 7.4 ms | 49.2% (45.8-52.7); 30 ms | 19.8% (17.9-21.7); 57 ms |
+| 50 | 99.6% (99.0-99.8); 0.54 ms | 85.5% (83.2-87.5); 6.5 ms | 54.6% (51.2-58.0); 29 ms | 19.2% (17.0-21.5); 60 ms |
 | 58 | 100% (99.0-100); 0.56 ms | 88.5% (85.0-91.3); 5.7 ms | 58.0% (54.0-61.9); 36 ms | 21.7% (19.6-23.9); 74 ms |
-| 127 | 100% (99.0-100); 0.58 ms | 97.0% (94.8-98.3); 6.3 ms | 86.3% (83.4-88.9); 24 ms | 21.8% (18.6-25.4); 60 ms |
+| 127 | 100% (99.0-100); 0.58 ms | 97.0% (94.8-98.3); 6.3 ms | 86.3% (83.4-88.9); 24 ms | 21.5% (18.3-24.9); 60 ms |
 
-45 and 50 SCCM are pending their neon runs.
+The 40, 45 and 50 SCCM neon fields are new, run with the scan's usual recipe.
+The 40-50 SCCM points sit between the 30 and 58 SCCM values, within their
+error bars. Centre at 45 (49.2%) vs 40 (50.9%) is a flat step inside the
+noise, not a dip.
 
 **Reading it:**
 - **No extraction peak up to 127 SCCM for a thermal ion, from any start
@@ -359,7 +365,7 @@ sigma = 1.93e-18 m^2, on the port axis. Two changes:
   47%, 23% and 8% going from 2mm before the outlet back to 10mm in.
   - Wall losses dominate everywhere except near the outlet.
   - Only the 10mm-in start loses ions back out of the inlet: 2-5% at
-    5-30 SCCM, 6-7% at 40-58 and 21% at 127. That is what flattens its
+    5-30 SCCM, 4-7% at 40-58 and 21% at 127. That is what flattens its
     curve at the top.
 - **Pump-out time is set by distance, not flow.**
   - 2mm before the outlet: ~0.55 ms at every flow.
