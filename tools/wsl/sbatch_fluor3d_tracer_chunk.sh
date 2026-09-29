@@ -16,17 +16,24 @@
 # tracer_<COND>*.out it finds.
 # COND is edep (default), table-central, table-low, table-high, const2e-18,
 # const1.5e-19, or thermal-const1.93e-18[-x42|-mid|-x66|-x75] (thermal-injection test).
+# Beam conditions take an optional energy suffix -e<eV> (default 500 eV).
 
 set -uo pipefail
 cd "$SLURM_SUBMIT_DIR"
 : "${SCCM:?}"; : "${SEED:?}"; NPART="${NPART:-2000}"; COND="${COND:-edep}"
 # injection: 500 eV beam along +x at the molecule-inlet port face, unless a
-# thermal-* condition overrides it
+# thermal-* condition overrides it. A beam condition may carry an energy
+# suffix, e.g. COND=table-central-e750 (750 eV); outputs keep the full tag.
 SPAWN_X=0.03048; VX=24843.71; TSPAWN=0
-case "$COND" in
+CBASE=$COND
+if [[ "$COND" =~ ^(.+)-e([0-9]+)$ ]]; then
+  CBASE=${BASH_REMATCH[1]}
+  VX=$(awk -v E="${BASH_REMATCH[2]}" 'BEGIN{printf "%.2f", sqrt(2*E*1.602177e-19/(156.325*1.66054e-27))}')
+fi
+case "$CBASE" in
   edep) A="--sigma-model edep" ;;   # 1/v-with-floor model (default before 55b5f6b)
   table-central|table-low|table-high)   # computed BaF+-Ne table (tracer default since 55b5f6b)
-        A="--sigma-model table --sigma-table-variant ${COND#table-}" ;;
+        A="--sigma-model table --sigma-table-variant ${CBASE#table-}" ;;
   const2e-18) A="--sigma-energy-dependent 0 --sigma 2.0e-18" ;;
   const1.5e-19) A="--sigma-energy-dependent 0 --sigma 1.5e-19" ;;
   thermal-const1.93e-18|thermal-const1.93e-18-x42|thermal-const1.93e-18-mid|thermal-const1.93e-18-x66|thermal-const1.93e-18-x75)
@@ -40,6 +47,7 @@ case "$COND" in
         #   -mid  chamber centre (x=54.5mm), like molecules born in the cell
         #   -x66  3/4 of the way through the chamber (x=65.9mm)
         #   -x75  2mm upstream of the outlet aperture (x=75.2mm)
+        [ "$CBASE" != "$COND" ] && { echo "no energy suffix on thermal conditions"; exit 2; }
         A="--sigma-model const --sigma 1.93e-18"; VX=0; TSPAWN=23
         case "$COND" in *-x42) SPAWN_X=0.0418 ;; *-mid) SPAWN_X=0.0545 ;; *-x66) SPAWN_X=0.0659 ;;
                         *-x75) SPAWN_X=0.0752 ;; *) SPAWN_X=0.0318 ;; esac ;;

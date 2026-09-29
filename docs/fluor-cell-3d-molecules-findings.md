@@ -393,6 +393,75 @@ noise, not a dip.
   - Short 30-min jobs on preemptable and normal started within minutes,
     even though `sbatch --test-only` estimated 1-2 days.
 
+### Injection energy scan (750 eV, 1 keV; edep model) (2026-09-29)
+
+**Setup.**
+- Injection: the same beam injection as the original scan: along +x from
+  the molecule-inlet port face (x = 30.48 mm), on the port axis, at
+  750 eV (30.4 km/s) and 1 keV (35.1 km/s).
+  - COND `edep-e750` and `edep-e1000`: sbatch_fluor3d_tracer_chunk.sh now
+    takes an energy suffix `-e<eV>` on beam conditions.
+- Cross section: the previous energy-dependent model (`--sigma-model
+  edep`), at the user's request, rather than the computed table.
+  - The model is sigma = max(2e-18 x v_ref/v_coll, 1.5e-19) m^2.
+  - It is at its 1.5e-19 floor for relative speeds above ~13x thermal
+    (~3.5 eV lab for BaF+). So sigma is constant through the whole
+    keV-to-eV slowdown, and 1/v only acts in the last few eV.
+  - The 500 eV reference is the original `edep` scan.
+  - Why not the table: the computed table's Q1 only reaches
+    E_cm = 1e6 K (~750 eV lab) and is held flat above it, so 1 keV would
+    have needed an extended table.
+- Neon fields: the same frozen 5-30 SCCM fields.
+- Statistics: at least 300 extracted per point, or 10,000 ions traced
+  (5, 10, 25 and 30 SCCM hit the cap).
+
+**Extracted % (95% Wilson interval); median pump-out time; % blown back out
+of the inlet:**
+
+| Flow (SCCM) | 500 eV | 750 eV | 1 keV |
+|---|---|---|---|
+| 5 | 1.02% (0.89-1.17); 8 ms; 0% | 0.99% (0.82-1.19); 10 ms; 0% | 0.92% (0.76-1.10); 9 ms; 0% |
+| 10 | 1.45% (1.24-1.69); 33 ms; 1% | 1.55% (1.34-1.80); 33 ms; 1% | 1.81% (1.57-2.07); 32 ms; 1% |
+| 15 | 2.60% (2.41-2.80); 48 ms; 6% | 2.93% (2.62-3.27); 46 ms; 5% | 2.91% (2.60-3.25); 48 ms; 4% |
+| 20 | **3.20% (2.96-3.46)**; 50 ms; 21% | **3.63% (3.26-4.03)**; 49 ms; 17% | **3.82% (3.44-4.24)**; 49 ms; 15% |
+| 25 | 2.09% (1.81-2.41); 54 ms; 42% | 2.59% (2.31-2.91); 53 ms; 36% | 2.57% (2.28-2.89); 52 ms; 32% |
+| 30 | 0.53% (0.46-0.62); 70 ms; 72% | 0.75% (0.60-0.94); 70 ms; 65% | 0.98% (0.81-1.19); 74 ms; 62% |
+
+Every extracted ion leaves thermalized (< 0.1 eV at exit), at every
+energy and flow, so the thermalized-only curve is the same as the total.
+The rest of the ions (not extracted, not blown back) end on the walls.
+
+**Reading it:**
+- **The peak stays at 20 SCCM for all three energies.** It rises only
+  modestly with energy: 3.2% (500 eV), 3.6% (750 eV), 3.8% (1 keV).
+  - 1 keV vs 500 eV at 20 SCCM is a 1.2x gain, just outside the error bars.
+  - 750 eV and 1 keV overlap within their error bars at most flows.
+- **Higher energy helps mainly at high flow, by cutting inlet backflow.**
+  At 30 SCCM, blow-back falls from 72% to 62% and extraction nearly
+  doubles (0.53% -> 0.98%).
+  - This fits the thermal-injection result: the deeper an ion stops, the
+    less the inlet backflow takes.
+  - But the gain is small because, with a constant 1.5e-19 m^2 floor,
+    each collision removes a roughly fixed fraction of the ion's energy.
+    The number of collisions to stop, and so the stopping range, grows
+    only logarithmically with the injection energy.
+    - ln(1 keV / 3.5 eV) vs ln(500 eV / 3.5 eV) is 5.7 vs 5.0, so about 15%
+      more path.
+    - Doubling the energy moves the stopping point a little deeper, but
+      nowhere near the chamber centre, where thermal starts gave 23-34% at
+      20-30 SCCM.
+- **At 5 SCCM energy makes no difference (~1%).** Wall losses dominate
+  there, and nothing is blown back out.
+- **Pump-out time doesn't depend on energy** (~50 ms at the peak). It is
+  set by where the ion thermalizes and the diffusion from there.
+- **Caveat:** flows of 10 SCCM and up are on the under-resolved 0.41 mm
+  chamber grid (shaded in the plot), so treat the port-flow details as
+  approximate.
+
+**Figures:** results/figures/fluor3d_scan_energy_{extraction,pumpout,energy}.png
+and _summary.csv, from `python tools/plot_fluor3d_scan.py --set energy`.
+The histograms show the 1 keV condition.
+
 # Original (leaky-field) results
 
 Follow-up to `docs/hpc-fluor-cell-3d-molecules-handoff.md`, working through its

@@ -56,6 +56,11 @@ CONDSETS["thermal"] = [  # test: BaF+ injected already at 23 K (no beam), consta
     ("thermal-const1.93e-18-x66", "thermal start, 3/4 through (x = 65.9 mm)", "#eda100"),        # slot 4
     ("thermal-const1.93e-18-x75", "thermal start, 2 mm before outlet (x = 75.2 mm)", "#e87ba4"),  # slot 5
 ]
+CONDSETS["energy"] = [  # injection-energy scan, previous energy-dependent (1/v, floored) sigma; first = primary
+    ("edep-e1000", "1 keV injection", "#2a78d6"),
+    ("edep-e750", "750 eV injection", "#eb6834"),
+    ("edep", "500 eV injection", "#1baf7a"),
+]
 REF = ("edep", "500 eV injection, energy-dependent σ (previous model)", "#9a9994")   # neutral reference line
 CONDS = CONDSETS["edep"]
 INK, INK2, GRID, SURF = "#0b0b0b", "#52514e", "#e4e3df", "#fcfcfb"
@@ -125,7 +130,8 @@ def main():
     if a.set == "thermal":
         FLOWS = FLOWS_ALL
     primary = CONDS[0][0]
-    ref = REF if a.set != "edep" else None
+    ref = REF if a.set not in ("edep", "energy") else None
+    fit = bool(ref) or a.set == "energy"   # plot only the flows the primary condition was run at
     if a.out is None:
         a.out = "results/figures/fluor3d_scan" + ("" if a.set == "edep" else f"_{a.set}")
     os.makedirs(os.path.dirname(a.out) or ".", exist_ok=True)
@@ -133,8 +139,8 @@ def main():
     rows, times, energies = [], {}, {}
     tags = [c[0] for c in CONDS] + ([ref[0]] if ref else [])
     for f in FLOWS:
-        if ref and not glob.glob(f"{post_dir(f)}/tracer_{primary}*.out"):
-            continue   # the table set only covers the flows it was run at
+        if fit and not glob.glob(f"{post_dir(f)}/tracer_{primary}*.out"):
+            continue   # these sets only cover the flows they were run at
         for tag in tags:
             if ref and tag == ref[0] and f in EXCLUDE:
                 continue
@@ -179,7 +185,7 @@ def main():
                     marker="o", ms=6, capsize=3,
                     elinewidth=1, mec=SURF, mew=1.5, label=label, zorder=3)
         ends.append((p[-1], f[-1], label.split(" (")[0]))
-        if tag == primary and a.set != "thermal":   # same condition, counting only ions that left thermalized
+        if tag == primary and a.set not in ("thermal", "energy"):   # same condition, counting only ions that left thermalized
             k = np.array([(energies[x["sccm"]] < E_THERMAL).sum() for x in d])
             n = np.array([x["n"] for x in d])
             w = np.array([wilson(kk, nn) for kk, nn in zip(k, n)]) * 100
@@ -189,7 +195,7 @@ def main():
     # direct labels at each series' last point, nudged apart where series end together
     ax.set_xscale("log")
     plotted = sorted({x["sccm"] for x in rows})
-    xlo, xhi = (0.8, 170) if not ref else (plotted[0] / 1.25, plotted[-1] * 1.35)
+    xlo, xhi = (0.8, 170) if not fit else (plotted[0] / 1.25, plotted[-1] * 1.35)
     ax.set_xlim(xlo, xhi)
     fig.canvas.draw()
     placed = []
@@ -201,7 +207,7 @@ def main():
             off += 11 * px
         placed.append(ypix + off)
         ax.annotate(text, (x, y), xytext=(6, off / px), textcoords="offset points", va="center", fontsize=8, color=INK2)
-    ticks = ([t for t in (1, 2, 4, 8, 15, 20, 30, 58) if FLOWS[0] <= t <= FLOWS[-1]] if not ref else plotted)
+    ticks = ([t for t in (1, 2, 4, 8, 15, 20, 30, 58) if FLOWS[0] <= t <= FLOWS[-1]] if not fit else plotted)
     ax.set_xticks(ticks)
     ax.set_xticklabels([str(t) for t in ticks])
     ax.minorticks_off()
@@ -210,18 +216,20 @@ def main():
     ax.set_ylim(bottom=0)
     if UNDER_RESOLVED:   # one band: every flow >= 10 SCCM is under-resolved
         ax.axvspan(min(UNDER_RESOLVED) / 1.08, xhi, color=GRID, alpha=0.5, lw=0, zorder=0)
-    ax.set_title("BaF⁺ extraction fraction vs. flow (" + ("thermal injection test" if a.set == "thermal" else "500 eV injection") + ", sealed cell)", color=INK, fontsize=11, loc="left",
+    ax.set_title("BaF⁺ extraction fraction vs. flow (" + ({"thermal": "thermal injection test", "energy": "injection energy scan, energy-dependent σ"}.get(a.set, "500 eV injection")) + ", sealed cell)", color=INK, fontsize=11, loc="left",
                  pad=12 + 13 * int(np.ceil(len(ax.get_legend_handles_labels()[0]) / 2)))
     ax.legend(frameon=False, fontsize=8, labelcolor=INK2, loc="lower left", bbox_to_anchor=(0, 1.0), ncol=2,
               handlelength=1.8, columnspacing=1.2)
     fig.text(0.01, 0.01, "Error bars: 95% Wilson interval. Shaded (>= 10 SCCM): chamber grid coarser than twice the Ne\n"
              "mean free path, so port flow is approximate. " +
-             ("1-2 SCCM extraction is hot ions flying straight through." if not ref else
+             ("Ions injected along the port axis with the previous energy-dependent σ (flat 1.5e-19 m² above\n~3.5 eV, 1/v below). "
+              "Nearly all extracted ions leave thermalized (< 0.1 eV)." if a.set == "energy" else
+              "1-2 SCCM extraction is hot ions flying straight through." if not ref else
               "Ions start as a 23 K Maxwellian (no beam) with constant\nσ = 1.93e-18 m², on the port axis at five depths."
               if a.set == "thermal" else
               "Dashed blue: ions leaving thermalized\n(< 0.1 eV); the rest at low flow are hot ions coasting straight through."),
              fontsize=7.5, color=INK2)
-    fig.tight_layout(rect=(0, 0.08 if ref else 0.06, 1, 1))
+    fig.tight_layout(rect=(0, 0.08 if fit else 0.06, 1, 1))
     fig.savefig(a.out + "_extraction.png", facecolor=SURF)
     plt.close(fig)
 
@@ -294,7 +302,7 @@ def main():
         ax.set_title(f"{f} SCCM", fontsize=9, color=INK, loc="left")
         ax.set_xlabel("kinetic energy at box exit", fontsize=8, color=INK2)
         ax.set_ylabel("% of injected ions", fontsize=8, color=INK2)
-    fig.suptitle(f"Extracted BaF⁺ kinetic energy ({CONDS[0][1]}; injected at 500 eV)", color=INK, fontsize=11, x=0.01, ha="left")
+    fig.suptitle(f"Extracted BaF⁺ kinetic energy ({CONDS[0][1]}" + ("" if a.set == "energy" else "; injected at 500 eV") + ")", color=INK, fontsize=11, x=0.01, ha="left")
     split_legend(fig)
     fig.text(0.01, 0.01, "Dashed: median of all extracted ions.  Dotted: 3/2 kT at 23 K (3.0 meV).", fontsize=7.5, color=INK2)
     fig.tight_layout(rect=(0, 0.04, 1, 0.97))
