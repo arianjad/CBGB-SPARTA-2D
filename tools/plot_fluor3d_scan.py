@@ -61,6 +61,11 @@ CONDSETS["energy"] = [  # injection-energy scan, previous energy-dependent (1/v,
     ("edep-e750", "750 eV injection", "#eb6834"),
     ("edep", "500 eV injection", "#1baf7a"),
 ]
+CONDSETS["kev"] = [  # keV injection with the extended computed table (41e1cc2); first = primary
+    ("table-central-e5000", "5 keV injection", "#2a78d6"),
+    ("table-central-e2000", "2 keV injection", "#eb6834"),
+    ("table-central", "500 eV injection", "#1baf7a"),
+]
 REF = ("edep", "500 eV injection, energy-dependent σ (previous model)", "#9a9994")   # neutral reference line
 CONDS = CONDSETS["edep"]
 INK, INK2, GRID, SURF = "#0b0b0b", "#52514e", "#e4e3df", "#fcfcfb"
@@ -127,11 +132,11 @@ def main():
     a = ap.parse_args()
     global CONDS, FLOWS
     CONDS = CONDSETS[a.set]
-    if a.set == "thermal":
+    if a.set in ("thermal", "kev"):
         FLOWS = FLOWS_ALL
     primary = CONDS[0][0]
-    ref = REF if a.set not in ("edep", "energy") else None
-    fit = bool(ref) or a.set == "energy"   # plot only the flows the primary condition was run at
+    ref = REF if a.set not in ("edep", "energy", "kev") else None
+    fit = bool(ref) or a.set in ("energy", "kev")   # plot only the flows the primary condition was run at
     if a.out is None:
         a.out = "results/figures/fluor3d_scan" + ("" if a.set == "edep" else f"_{a.set}")
     os.makedirs(os.path.dirname(a.out) or ".", exist_ok=True)
@@ -152,6 +157,7 @@ def main():
             p, lo, hi = wilson(tr.sum(), len(r))
             rows.append(dict(sccm=f, cond=tag, n=len(r), transmitted=int(tr.sum()), lost=int(lost.sum()),
                              wall=int(wall.sum()), frac=p, lo=lo, hi=hi,
+                             thermal=int((0.5 * M_BAF * (r[tr, 7:10] ** 2).sum(1) / EV < E_THERMAL).sum()),
                              t_median_ms=float(np.median(r[tr, 11]) * 1e3) if tr.any() else np.nan,
                              E_median_eV=float(np.median(0.5 * M_BAF * (r[tr, 7:10] ** 2).sum(1) / EV)) if tr.any() else np.nan))
             if tag == primary:
@@ -185,7 +191,12 @@ def main():
                     marker="o", ms=6, capsize=3,
                     elinewidth=1, mec=SURF, mew=1.5, label=label, zorder=3)
         ends.append((p[-1], f[-1], label.split(" (")[0]))
-        if tag == primary and a.set not in ("thermal", "energy"):   # same condition, counting only ions that left thermalized
+        if a.set == "kev":   # hot fly-through dominates at low flow: thermalized-only for every series
+            w = np.array([wilson(x["thermal"], x["n"]) for x in d]) * 100
+            ax.errorbar(f, w[:, 0], yerr=[np.clip(w[:, 0] - w[:, 1], 0, None), np.clip(w[:, 2] - w[:, 0], 0, None)],
+                        color=col, lw=1.5, ls="--", marker="o", ms=5, mfc=SURF, mec=col, mew=1.2, capsize=2,
+                        elinewidth=0.8, label=f"{label}, thermalized only", zorder=3)
+        elif tag == primary and a.set not in ("thermal", "energy"):   # same condition, counting only ions that left thermalized
             k = np.array([(energies[x["sccm"]] < E_THERMAL).sum() for x in d])
             n = np.array([x["n"] for x in d])
             w = np.array([wilson(kk, nn) for kk, nn in zip(k, n)]) * 100
@@ -216,13 +227,16 @@ def main():
     ax.set_ylim(bottom=0)
     if UNDER_RESOLVED:   # one band: every flow >= 10 SCCM is under-resolved
         ax.axvspan(min(UNDER_RESOLVED) / 1.08, xhi, color=GRID, alpha=0.5, lw=0, zorder=0)
-    ax.set_title("BaF⁺ extraction fraction vs. flow (" + ({"thermal": "thermal injection test", "energy": "injection energy scan, energy-dependent σ"}.get(a.set, "500 eV injection")) + ", sealed cell)", color=INK, fontsize=11, loc="left",
+    ax.set_title("BaF⁺ extraction fraction vs. flow (" + ({"thermal": "thermal injection test", "energy": "injection energy scan, energy-dependent σ",
+                   "kev": "keV injection, computed σ table"}.get(a.set, "500 eV injection")) + ", sealed cell)", color=INK, fontsize=11, loc="left",
                  pad=12 + 13 * int(np.ceil(len(ax.get_legend_handles_labels()[0]) / 2)))
     ax.legend(frameon=False, fontsize=8, labelcolor=INK2, loc="lower left", bbox_to_anchor=(0, 1.0), ncol=2,
               handlelength=1.8, columnspacing=1.2)
     fig.text(0.01, 0.01, "Error bars: 95% Wilson interval. Shaded (>= 10 SCCM): chamber grid coarser than twice the Ne\n"
              "mean free path, so port flow is approximate. " +
-             ("Ions injected along the port axis with the previous energy-dependent σ (flat 1.5e-19 m² above\n~3.5 eV, 1/v below). "
+             ("Dashed: ions leaving thermalized (< 0.1 eV). At low flow keV ions fly\nstraight through the outlet hot; "
+              "electronic stopping and BaF⁺ dissociation are not modeled." if a.set == "kev" else
+              "Ions injected along the port axis with the previous energy-dependent σ (flat 1.5e-19 m² above\n~3.5 eV, 1/v below). "
               "Nearly all extracted ions leave thermalized (< 0.1 eV)." if a.set == "energy" else
               "1-2 SCCM extraction is hot ions flying straight through." if not ref else
               "Ions start as a 23 K Maxwellian (no beam) with constant\nσ = 1.93e-18 m², on the port axis at five depths."
@@ -302,7 +316,7 @@ def main():
         ax.set_title(f"{f} SCCM", fontsize=9, color=INK, loc="left")
         ax.set_xlabel("kinetic energy at box exit", fontsize=8, color=INK2)
         ax.set_ylabel("% of injected ions", fontsize=8, color=INK2)
-    fig.suptitle(f"Extracted BaF⁺ kinetic energy ({CONDS[0][1]}" + ("" if a.set == "energy" else "; injected at 500 eV") + ")", color=INK, fontsize=11, x=0.01, ha="left")
+    fig.suptitle(f"Extracted BaF⁺ kinetic energy ({CONDS[0][1]}" + ("" if a.set in ("energy", "kev") else "; injected at 500 eV") + ")", color=INK, fontsize=11, x=0.01, ha="left")
     split_legend(fig)
     fig.text(0.01, 0.01, "Dashed: median of all extracted ions.  Dotted: 3/2 kT at 23 K (3.0 meV).", fontsize=7.5, color=INK2)
     fig.tight_layout(rect=(0, 0.04, 1, 0.97))

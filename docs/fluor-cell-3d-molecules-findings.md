@@ -563,6 +563,76 @@ depth ~7 mm at all three, extraction 3.2 / 3.6 / 3.8%.
 `python tools/plot_fluor3d_energy20.py`. Its stop-depth input is
 results/figures/fluor3d_20sccm_stopdepth.csv, which holds the table above.
 
+### Flow scan at 2 and 5 keV (computed table) (2026-09-30 night)
+
+**Setup.**
+- Same injection and extended table as the 20 SCCM keV section above,
+  at 2 keV and 5 keV, over every frozen field from 5 to 58 SCCM.
+- The 500 eV table scan (5-30 SCCM) is the reference.
+- Statistics: at least 300 extracted per point, except 2 keV at 58 SCCM
+  (150 extracted).
+
+**Per flow: all extracted / thermalized (95% CI) / blown back out of the
+inlet / median pump-out time.**
+
+| Flow (SCCM) | 5 keV | 2 keV | 500 eV |
+|---|---|---|---|
+| 5 | 28.6% / **0.0% (0-0.1)** / 0% / <1 ms | 12.5% / **0.0% (0-0.1)** / 0% / <1 ms | 3.2% / **1.1% (0.9-1.3)** / 0% |
+| 10 | 10.5% / **1.5% (1.2-2.0)** / 0% / <1 ms | 7.8% / **5.9% (5.3-6.5)** / 0% / 4 ms | 4.6% / **4.6% (4.2-5.0)** / 0% / 18 ms |
+| 15 | 12.5% / **10.4% (9.4-11.5)** / 0% / 7 ms | 12.9% / **12.7% (11.6-13.9)** / 0% / 20 ms | 6.5% / **6.5% (5.8-7.2)** / 1% / 39 ms |
+| 20 | 20.2% / **19.4% (18.0-20.9)** / 0% / 17 ms | 15.2% / **15.2% (13.7-16.8)** / 0% / 33 ms | 8.6% / **8.6% (7.9-9.5)** / 5% / 44 ms |
+| 25 | 22.0% / **22.0% (19.9-24.2)** / 0% / 25 ms | 14.5% / **14.5% (13.2-16.0)** / 1% / 41 ms | 8.6% / **8.6% (7.7-9.5)** / 8% / 51 ms |
+| 30 | 22.4% / **22.4% (20.4-24.6)** / 1% / 40 ms | 14.7% / **14.7% (13.5-16.0)** / 4% / 54 ms | 5.6% / **5.6% (4.9-6.4)** / 24% / 66 ms |
+| 40 | 25.8% / **25.8% (23.6-28.1)** / 3% / 44 ms | 13.2% / **13.2% (12.0-14.6)** / 11% / 53 ms | - |
+| 45 | 23.0% / **23.0% (21.1-25.0)** / 4% / 52 ms | 13.2% / **13.2% (12.0-14.6)** / 16% / 59 ms | - |
+| 50 | 22.6% / **22.6% (20.7-24.6)** / 5% / 57 ms | 10.8% / **10.8% (9.6-12.1)** / 25% / 64 ms | - |
+| 58 | 18.1% / **18.1% (16.4-19.8)** / 14% / 71 ms | 5.8% / **5.8% (5.0-6.7)** / 49% / 82 ms | - |
+
+**Cross-section sensitivity (20 SCCM, 5 keV; thermalized):**
+- Central table: 19.4%.
+- Soft-wall "low" variant: 13.6% (17.3% total). Its smaller sigma lets more
+  ions overshoot and leave hot.
+- Stiff-wall "high" variant: 16.9%. Its larger sigma makes them stop
+  shallower.
+- So 5 keV sits near the optimum for the central table. The
+  +-factor-2 short-range uncertainty moves the 20 SCCM yield by roughly
+  -10 to -30%.
+
+**Reading it:**
+- **Best: 5 keV at ~40 SCCM, 26% thermalized.** That's 3x the 500 eV table
+  peak (8.6% at 20-25 SCCM) and ~7x the old edep 500 eV peak.
+  - 5 keV is flat within the error bars at 22-26% from 25 to 50 SCCM, so
+    the optimum is broad.
+- **The peak moves to higher flow with energy**: ~20-25 SCCM at 500 eV,
+  ~20-30 SCCM at 2 keV, ~40 SCCM at 5 keV.
+  - Deeper-stopping ions are blown back out of the inlet only at higher
+    flow. At 30 SCCM backflow takes 24% at 500 eV, 4% at 2 keV and 1% at
+    5 keV.
+  - Meanwhile denser gas keeps slowing diffusion to the walls.
+  - At 58 SCCM backflow returns (14% at 5 keV, 49% at 2 keV).
+- **At low flow keV ions don't thermalize.** At 5 SCCM, 5 keV gives 28.6%
+  extracted but none thermalized: the ions fly straight along the axis and
+  out of the outlet within microseconds. Thermalized-only is the meaningful
+  yield.
+  - Below ~15 SCCM, 500 eV actually beats 5 keV on thermalized yield.
+- **Pump-out times grow with flow** (5 keV: 17 ms at 20 SCCM to 71 ms at 58).
+
+**Caveats:**
+- **Electronic stopping is not modeled** (LSS estimate ~30-50% of nuclear
+  at 1-10 keV). It would shorten the ranges, so the optimum energy is
+  probably above 5 keV.
+- **BaF+ dissociation and internal heating in keV collisions are not
+  modeled.**
+- **The chamber grid is under-resolved** from 10 SCCM up, and badly at
+  40-58 SCCM (Ne mean free path ~0.03-0.04 mm vs 0.41 mm cells). The inlet backflow
+  at those flows is only approximate.
+- **40, 45 and 50 SCCM use the new 0.3 s neon fields; 58 SCCM uses the
+  original scan field.**
+
+**Figures:** results/figures/fluor3d_scan_kev_{extraction,pumpout,energy}.png
+and _summary.csv, from `python tools/plot_fluor3d_scan.py --set kev`. The
+histograms show 5 keV.
+
 # Original (leaky-field) results
 
 Follow-up to `docs/hpc-fluor-cell-3d-molecules-handoff.md`, working through its
