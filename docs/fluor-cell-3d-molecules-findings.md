@@ -458,6 +458,33 @@ The rest of the ions (not extracted, not blown back) end on the walls.
   chamber grid (shaded in the plot), so treat the port-flow details as
   approximate.
 
+**Where the ions stop (20 SCCM, 40 ions each, seed 300).** The stopping
+point is the first place an ion drops below 1 eV. Depth is measured along
+the port axis past the port face (x = 30.48 mm). The chamber starts
+1.3 mm in, and its centre is 24 mm in.
+
+| Model | 500 eV | 750 eV | 1 keV | Collisions to 1 eV | First free path |
+|---|---|---|---|---|---|
+| edep (old, this scan) | 7.1 mm | 7.8 mm | 7.6 mm | 28 / 29 / 30 | 0.4-0.6 mm |
+| computed table | 12.3 mm | 14.3 mm | 15.5 mm | 28 / 30 / 31 | 1.3-1.6 mm |
+
+(Mean depth; p10-p90 spread ~3-4 mm for edep, ~9-12 mm for the table.)
+
+- A BaF+ ion loses on average 2mM/(m+M)^2 = 20% of its energy per Ne
+  collision. So the number of collisions to stop grows only as ln(E0).
+  Doubling the energy adds ~3 collisions, which matches the counts above.
+- **edep:** sigma is pinned at its 1.5e-19 floor, so every free path is the
+  same (~0.4 mm here). The 3 extra collisions add under 1 mm, so 500 eV to
+  1 keV all stop ~7 mm in, the same within noise. That is why the three
+  edep curves hardly differ.
+- **Computed table:** sigma is ~3.7x smaller at these energies (4-6e-20)
+  and falls with speed. Fast ions fly farther per collision, stop about
+  twice as deep, and the depth does grow with energy (~+25% from 500 eV
+  to 1 keV).
+- The table's 500 eV stopping depth (~12 mm) matches the "10 mm in"
+  thermal start, and the two extraction curves agree (8-10% at 20-30
+  SCCM).
+
 **Figures:** results/figures/fluor3d_scan_energy_{extraction,pumpout,energy}.png
 and _summary.csv, from `python tools/plot_fluor3d_scan.py --set energy`.
 The histograms show the 1 keV condition.
