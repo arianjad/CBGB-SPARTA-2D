@@ -21,7 +21,9 @@ Writes:
                 (times, pos[ion, frame, xyz], alive[ion, frame], fate, walls path)
 
 Usage: python tools/render_fluor3d_trajectories.py TRAJ.out --surf SURF --out OUT
-         [--sccm 17] [--energy "500 eV"] [--frames 160] [--tmin 1e-7] [--trail 6] [--xmax 0.11]
+         [--sccm 17] [--energy "500 eV"] [--frames 160] [--tmin 1e-7] [--linear-after T] [--trail 6] [--xmax 0.11]
+  --linear-after T: first half of the frames log-spaced from tmin to T, second half linear
+                    from T to the end (same frame count, so the GIF keeps its length)
 """
 import argparse
 import os
@@ -70,6 +72,8 @@ def main():
     ap.add_argument("--energy", default="500 eV", help="injection energy, for the plot labels only")
     ap.add_argument("--frames", type=int, default=160)
     ap.add_argument("--tmin", type=float, default=1e-7)
+    ap.add_argument("--linear-after", type=float, default=None,
+                    help="s; log-spaced frames up to here (first half), linear after (second half)")
     ap.add_argument("--trail", type=int, default=6)
     ap.add_argument("--xmax", type=float, default=0.11, help="crop view at this x (m); ions beyond are hidden")
     a = ap.parse_args()
@@ -85,7 +89,13 @@ def main():
           f"{(fate==0).sum()} extracted, {(fate==1).sum()} wall, {(fate==2).sum()} back out inlet")
 
     tmax = tend.max()
-    times = np.logspace(np.log10(a.tmin), np.log10(tmax), a.frames)
+    if a.linear_after:
+        nlog = a.frames // 2
+        times = np.concatenate([np.logspace(np.log10(a.tmin), np.log10(a.linear_after), nlog, endpoint=False),
+                                np.linspace(a.linear_after, tmax, a.frames - nlog)])
+    else:
+        times = np.logspace(np.log10(a.tmin), np.log10(tmax), a.frames)
+    scale = ["log time" if (not a.linear_after or t < a.linear_after) else "linear time" for t in times]
     pos = np.full((len(ids), a.frames, 3), np.nan)
     alive = np.zeros((len(ids), a.frames), bool)
     for n, (i, te) in enumerate(zip(ids, tend)):
@@ -127,7 +137,7 @@ def main():
         if m.sum() > 1:
             pl.add_mesh(pv.lines_from_points(pos[n, m]), color=FATES[names[fate[n]]], line_width=2)
     fate_key(pl)
-    pl.add_text(f"BaF+ paths, {a.sccm} SCCM Ne, {a.energy} injection (log-time sampled)", font_size=11, color="#0b0b0b")
+    pl.add_text(f"BaF+ paths, {a.sccm} SCCM Ne, {a.energy} injection (" + ("log, then linear time" if a.linear_after else "log-time") + " sampled)", font_size=11, color="#0b0b0b")
     pl.screenshot(a.out + "_paths.png")
     pl.close()
 
@@ -152,7 +162,7 @@ def main():
                     dyn.append(pl.add_mesh(pv.lines_from_points(seg), color=FATES[nm], line_width=2, opacity=0.6))
         t = times[f]
         label = f"t = {t*1e6:.2f} us" if t < 1e-3 else f"t = {t*1e3:.2f} ms"
-        dyn.append(pl.add_text(f"{label}   (log time)   {a.sccm} SCCM Ne, BaF+ injected at {a.energy}; color = eventual fate",
+        dyn.append(pl.add_text(f"{label}   ({scale[f]})   {a.sccm} SCCM Ne, BaF+ injected at {a.energy}; color = eventual fate",
                                font_size=11, color="#0b0b0b", position="upper_left"))
         pl.write_frame()
     pl.close()
