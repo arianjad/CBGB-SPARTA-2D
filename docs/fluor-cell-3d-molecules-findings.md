@@ -489,6 +489,80 @@ the port axis past the port face (x = 30.48 mm). The chamber starts
 and _summary.csv, from `python tools/plot_fluor3d_scan.py --set energy`.
 The histograms show the 1 keV condition.
 
+### keV injection at 20 SCCM (extended computed table) (2026-09-29 night)
+
+**Setup.**
+- Cross section: the computed BaF+-Ne table, extended to ~19 keV lab
+  (commit 41e1cc2).
+  - Q1 was previously computed only up to E_cm = 1e6 K (~750 eV lab) and
+    held flat above that.
+  - Rows below 1e6 K are unchanged.
+  - Above that, sigma falls as ~v^-1 to v^-1.4.
+  - The implied nuclear stopping matches ZBL universal stopping to 1-2%
+    from 0.5 to 15 keV lab.
+- Injection: 500 eV to 10 keV, the same beam injection on the port axis,
+  COND `table-central[-e<eV>]`.
+- Neon field: the frozen 20 SCCM field.
+- Statistics: at least 300 extracted per energy.
+- Stopping depth: from 40 recorded ions per energy (seed 300), taken as the
+  first drop below 1 eV, measured past the port face (x = 30.48 mm).
+  - The chamber centre is 24 mm in; the outlet aperture is 46.7 mm in.
+  - Job scripts: `sccm20/post/traj/stopdepth_table_{a,b}.sh` in scratch.
+
+| Energy | Stop depth, mean (p10-p90) | Never slowed below 1 eV | Extracted (95% CI) | Leaving thermalized | Blown back out of inlet | Median pump-out |
+|---|---|---|---|---|---|---|
+| 500 eV | 11.8 mm (8.6-16.2) | 0/40 | 8.6% (7.9-9.5) | 8.6% | 4.6% | 44 ms |
+| 750 eV | 13.4 mm (10.0-16.6) | 0/40 | 9.7% (8.8-10.7) | 9.7% | 3.0% | 42 ms |
+| 1 keV | 14.3 mm (11.1-18.1) | 0/40 | 11.4% (10.3-12.6) | 11.4% | 1.5% | 40 ms |
+| 2 keV | 20.1 mm (14.5-25.8) | 0/40 | 15.2% (13.7-16.8) | 15.2% | 0.5% | 33 ms |
+| 5 keV | 25.8 mm (18.0-33.8) | 3/40 | **20.2% (18.8-21.7)** | **19.4%** | 0.0% | 17 ms |
+| 10 keV | 34.6 mm (25.3-43.4) | 10/40 | 18.3% (16.9-19.8) | 14.7% | 0.0% | 7.8 ms |
+
+For comparison, the previous edep model at 500 eV / 750 eV / 1 keV: stop
+depth ~7 mm at all three, extraction 3.2 / 3.6 / 3.8%.
+
+**Reading it:**
+- **With realistic cross sections, energy does push the ions deeper.**
+  Depth grows roughly as sqrt(E) (sigma ~ 1/v makes each free path grow
+  with speed): 12 mm at 500 eV, 20 mm at 2 keV, 26 mm at 5 keV, 35 mm at
+  10 keV.
+- **Extraction follows the stopping depth**, as the thermal-injection
+  runs predicted. At 20 SCCM a thermal start gave:
+  - 8.3% at 11 mm (500 eV lands there: 8.6%);
+  - 23% at the centre, 24 mm (5 keV lands at ~26 mm: 20%);
+  - 47% at 35 mm.
+- **The best is ~5 keV: ~20% extracted, 19% thermalized.** That's 2.3x the
+  500 eV table result and ~6x the old edep peak.
+- **Above ~5 keV, ions start overshooting.**
+  - At 10 keV, a quarter of the tracked ions reach a wall or the outlet
+    before slowing below 1 eV.
+  - About 3.6% of injected ions leave through the outlet still hot.
+  - The thermalized yield falls to 15%, although the mean stopping depth
+    (35 mm) sits where a thermal start gives 47%.
+  - The wide spread in depth (p90 at 43 mm, almost at the outlet wall)
+    costs more than going deeper gains.
+- **Inlet backflow goes away above ~2 keV** (0.5% or less). It had been
+  the main loss mechanism at 500 eV with the edep model.
+- **Pump-out gets faster with energy** (44 ms -> 17 ms at 5 keV) because
+  the ions stop closer to the outlet.
+
+**Caveats:**
+- **Electronic stopping is not modeled.** A Lindhard-Scharff-Schiott
+  estimate for Ba in Ne puts it at ~30-50% of nuclear stopping at 1-10 keV.
+  It would shorten these ranges, pushing the best energy somewhat higher
+  than 5 keV.
+- **BaF+ dissociation in keV collisions is not modeled.** CM energies reach
+  ~1 keV at 10 keV injection, far above the molecular bond energy, so hard
+  collisions could break the molecule or heat it internally.
+- **The grid is under-resolved at 20 SCCM** (the 0.41 mm chamber cells are
+  coarser than the neon mean free path).
+- **Stopping depths come from 40 ions each** (~+-1 mm statistical). For
+  example, 500 eV gave 12.3 mm and 11.8 mm in two runs with the same table.
+
+**Figure:** results/figures/fluor3d_20sccm_energy_table.png, from
+`python tools/plot_fluor3d_energy20.py`. Its stop-depth input is
+results/figures/fluor3d_20sccm_stopdepth.csv, which holds the table above.
+
 # Original (leaky-field) results
 
 Follow-up to `docs/hpc-fluor-cell-3d-molecules-handoff.md`, working through its
