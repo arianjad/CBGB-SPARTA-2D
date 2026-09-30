@@ -19,7 +19,7 @@ def make(ra, s=1.0):
         return np.where(r >= RJ, Vm(r), np.where(r <= ra, s*V_zbl(r), mid))
     return V, k
 rg = np.concatenate([np.linspace(0.05, 2, 4000), np.linspace(2, 60, 20000)[1:], np.geomspace(60, 3000, 3000)[1:]])
-E = np.geomspace(1, 1e6, 49); out = {"E": E.tolist()}
+E = np.geomspace(1, 10**7.5, 61); out = {"E": E.tolist()}   # 8/decade; 1e6 K = 750 eV lab, 10**7.5 K ~ 24 keV lab
 var = {"central(ra=1.5)": (1.5, 1.0), "stiff(ra=1.8,x2)": (1.8, 2.0), "soft(ra=1.2,x0.5)": (1.2, 0.5)}
 print(f"V_model(2.9)={Vm(np.array([RJ]))[0]:.1f} K")
 for name, (ra, s) in var.items():
@@ -28,5 +28,5 @@ for name, (ra, s) in var.items():
     out[name] = [Q1(e, V, rg, nb=700) for e in E]
 json.dump(out, open("ion_curve4.json", "w"))
 print("E[K]      E_lab[eV]  " + "  ".join(f"{k:>18s}" for k in var))
-for i in range(0, 49, 3):
+for i in range(0, len(E), 3):
     print(f"{E[i]:9.3g} {E[i]/0.11434*8.617e-5:9.3g}  " + "  ".join(f"{out[k][i]:18.2f}" for k in var))

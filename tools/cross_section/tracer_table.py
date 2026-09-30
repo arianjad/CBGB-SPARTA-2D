@@ -25,7 +25,8 @@ def Q1fun(key):
 rng = np.random.default_rng(1)
 vg = rng.normal(0, np.sqrt(kB*T/m), size=(2_000_000, 3))
 vref = np.sqrt(8*kB*T/(np.pi*m))
-Vs = np.concatenate([[0.5], np.geomspace(2, 40000, 90)])
+r = 20000**(1/89)                                    # the original 2..40000 m/s log step
+Vs = np.concatenate([[0.5], np.geomspace(2, 40000*r**12, 102)])   # extended to 152 km/s (10 keV lab = 111 km/s)
 out = {k: [] for k in cols}; Ec = []
 for V in Vs:
     g_vec = np.array([V, 0, 0]) - vg; g = np.linalg.norm(g_vec, axis=1); gpar = g_vec[:, 0]
@@ -37,7 +38,7 @@ Ec = np.array(Ec)
 ref = Q1fun(cols["central"])
 print(f"v_ref={vref:.1f} m/s, E_cm(V=0)={Ec[0]:.2f} K")
 print("  V[m/s]   E_cm[K]   sigma_t     Q1(E_cm)   ratio")
-for i in [0, 10, 20, 30, 40, 50, 60, 70, 80, 90]:
+for i in [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 96, 102]:
     print(f"{Vs[i]:8.1f} {Ec[i]:9.3g} {out['central'][i]:.3e}  {float(ref(Ec[i])):.3e}  {out['central'][i]/float(ref(Ec[i])):.3f}")
 # thermal-average cross-check: Chapman-Enskog sigma_bar(23 K) * gbar / vref
 x = np.linspace(1e-4, 30, 6000); sb = 0.5*np.trapz(x**2*np.exp(-x)*ref(x*T), x)
