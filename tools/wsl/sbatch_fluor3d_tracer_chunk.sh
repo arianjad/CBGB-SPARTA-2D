@@ -53,7 +53,7 @@ case "$CBASE" in
                         *-x75) SPAWN_X=0.0752 ;; *) SPAWN_X=0.0318 ;; esac ;;
   *) echo "unknown COND $COND"; exit 2 ;;
 esac
-RUNDIR="$HOME/orcd/scratch/cbgb-sparta-3d/fluor-scan/sccm$SCCM"
+RUNDIR="$HOME/orcd/scratch/cbgb-sparta-3d/${RUNBASE:-fluor-scan}/sccm$SCCM"   # RUNBASE: grid-convergence runs
 [ "$SCCM" = 4 ] && RUNDIR="$HOME/orcd/scratch/cbgb-sparta-3d/fluor-cell-3d-ne-sealed"
 cd "$RUNDIR/post" || exit 2
 [ -f frozen.grid ] || { echo "no frozen.grid -- run sbatch_fluor3d_scan_post.sh first"; exit 2; }

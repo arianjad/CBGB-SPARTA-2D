@@ -20,6 +20,7 @@
 # CHECKPOINT_STEPS, and NCHUNKS with -var.
 
 variable    SEED index 8675309
+variable    REFINE index 8      # chamber (region CAV) refinement per axis: 8 -> 0.41mm cells, 16 -> 0.20mm
 variable    WEIGHT index radius
 seed        ${SEED}
 units       si
@@ -29,7 +30,7 @@ global      gridcut 0.0
 global      surfmax 2000
 create_box  0.005 0.200 -0.020 0.070 -0.030 0.080
 region      CAV block 0.0295 0.0835 0.002 0.042 -0.001 0.0365
-create_grid 60 27 33 levels 2 region 2 CAV 8 8 8 inside any
+create_grid 60 27 33 levels 2 region 2 CAV ${REFINE} ${REFINE} ${REFINE} inside any
 balance_grid rcb cell
 global      mem/limit 1900
 species     ne.species Ne

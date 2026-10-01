@@ -37,7 +37,8 @@ BADNODES=$(sinfo -p mit_preemptable -h -N -o %N | grep -E "^node1[78][0-9][0-9]$
 # walltimes on several partitions backfill sooner than one long request).
 TOPT="${TOPT:--p mit_preemptable -t 01:00:00 --cpus-per-task=40 --mem=96G${BADNODES:+ --exclude=$BADNODES}}"
 IFS=';' read -ra TOPTS <<<"$TOPT"; ti=0
-pdir() { [ "$1" = 4 ] && echo "$B/fluor-cell-3d-ne-sealed/post" || echo "$B/fluor-scan/sccm$1/post"; }
+RUNBASE="${RUNBASE:-fluor-scan}"   # e.g. fluor-scan-fine for the grid-convergence runs (exported to the chunks)
+pdir() { [ "$1" = 4 ] && [ "$RUNBASE" = fluor-scan ] && echo "$B/fluor-cell-3d-ne-sealed/post" || echo "$B/$RUNBASE/sccm$1/post"; }
 count() {  # prints "n extracted" for the pooled edep outputs of a post dir
   python - "$1" "$COND" <<'EOF'
 import glob, sys

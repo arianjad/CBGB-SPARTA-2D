@@ -29,13 +29,14 @@ cd "$SLURM_SUBMIT_DIR"
 NPART="${NPART:-1000}"
 # DT and averaging-window length (steps): shared with sbatch_fluor3d_scan.sh
 source tools/wsl/fluor3d_flow_params.sh
-flow_params "$SCCM"; WIN=$DUMPFREQ
+flow_params "$SCCM"; WIN=${WINDOW:-$DUMPFREQ}   # WINDOW, DT_SET: grid-convergence runs (sbatch_fluor3d_scan.sh)
+DT="${DT_SET:-$DT}"
 # freeze: last 20 ms; asymmetry: last 75 ms (read from the dump's tail only)
 read SPAN NFREEZE NASYM <<<"$(python3 -c "
 import math; dt=$DT; w=$WIN
 print(int(round(0.02/dt)), max(1, math.ceil(0.02/dt/w)), max(1, math.ceil(0.075/dt/w)))")"
 NASYM="${ASYM_FRAMES:-$NASYM}"   # override for huge dumps (127 SCCM: 32 frames x 340MB)
-RUNDIR="$HOME/orcd/scratch/cbgb-sparta-3d/fluor-scan/sccm$SCCM"
+RUNDIR="$HOME/orcd/scratch/cbgb-sparta-3d/${RUNBASE:-fluor-scan}/sccm$SCCM"
 [ "$SCCM" = 4 ] && RUNDIR="$HOME/orcd/scratch/cbgb-sparta-3d/fluor-cell-3d-ne-sealed"
 OUT="$RUNDIR/post"; mkdir -p "$OUT"
 

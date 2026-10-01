@@ -45,7 +45,17 @@
 #   leaves stray frames.
 # - CHECKPOINT_STEPS = DUMPFREQ, so every restart lands on an
 #   averaging-window edge.
-# - NP must stay 40 for the whole flow.
+# - NP must stay the same for the whole flow (40 by default; the chain keeps
+#   the first job's --ntasks).
+# - Grid-convergence runs (all optional, passed through the chain):
+#   GRIDREF=<n> refines the chamber n x n x n per coarse cell (default 8 ->
+#   0.41mm; 16 -> 0.20mm), with FNUM scaled by (8/n)^3 to keep particles per
+#   cell; RUNBASE=<dir> under cbgb-sparta-3d (default fluor-scan); SIM_S=<s>
+#   simulated time (default 0.3); WINDOW=<steps> averaging window / checkpoint
+#   interval (default from flow_params); CHAIN_NODES=<n|min-max> per job;
+#   INPUT=<tag> uses in.ne_fluor3d_<tag>_run/_resume (default sealed; "ports"
+#   = port-refined grid with volume weighting, PORTREF=<n> its refinement);
+#   FNUM_SET / DT_SET override FNUM / DT (DT_SET needs SIM_S).
 
 set -uo pipefail
 cd "$SLURM_SUBMIT_DIR"
@@ -56,15 +66,20 @@ module load gcc/12.2.0 openmpi/4.1.4
 source "$SLURM_SUBMIT_DIR/tools/wsl/fluor3d_flow_params.sh"
 flow_params "$SCCM"   # DT, DUMPFREQ, CHUNKS_QT, TOTAL -- see that file
 MAXCHUNKS="${MAXCHUNKS:-$CHUNKS_QT}"
+GRIDREF="${GRIDREF:-8}"; RUNBASE="${RUNBASE:-fluor-scan}"; INPUT="${INPUT:-sealed}"; PORTREF="${PORTREF:-4}"
+DT="${DT_SET:-$DT}"
+DUMPFREQ="${WINDOW:-$DUMPFREQ}"
+[ -n "${SIM_S:-}" ] && TOTAL=$(python3 -c "print(int(round($SIM_S/$DT/$DUMPFREQ))*$DUMPFREQ)")
 read MDOT FILLN FNUM <<<"$(python3 -c "
 f=$SCCM
-print(f'{1.500541e-8*f:.6e} {1.35e21*f:.4e} {5e10*f:.4e}')")"
+print(f'{1.500541e-8*f:.6e} {1.35e21*f:.4e} {5e10*f*(8/$GRIDREF)**3:.4e}')")"
+FNUM="${FNUM_SET:-$FNUM}"
 
 CASEDIR=cases/fluor-cell-3d
 SCRIPT="$SLURM_SUBMIT_DIR/tools/wsl/sbatch_fluor3d_scan.sh"
-RUNDIR="$HOME/orcd/scratch/cbgb-sparta-3d/fluor-scan/sccm$SCCM"
+RUNDIR="$HOME/orcd/scratch/cbgb-sparta-3d/$RUNBASE/sccm$SCCM"
 mkdir -p "$RUNDIR"
-cp -n "$CASEDIR"/in.ne_fluor3d_sealed_run "$CASEDIR"/in.ne_fluor3d_sealed_resume \
+cp -n "$CASEDIR"/in.ne_fluor3d_${INPUT}_run "$CASEDIR"/in.ne_fluor3d_${INPUT}_resume \
       "$CASEDIR"/cell_fluor3d_sealed.surf "$CASEDIR"/ne.species "$CASEDIR"/ne.vss "$RUNDIR/"
 cd "$RUNDIR"
 
@@ -73,7 +88,8 @@ resubmit() {  # $1 = extra sbatch args (e.g. a --begin delay)
   for i in $(seq 60); do   # retry up to 30 min: quicktest caps queued jobs at 8/user
     next=$(cd "$SLURM_SUBMIT_DIR" && sbatch --parsable --partition="$SLURM_JOB_PARTITION" --nice="${NICE:-0}" \
            --time="${CHAIN_TIME:-00:15:00}" ${EXCLUDE:+--exclude=$EXCLUDE} $1 \
-           --export=ALL,SCCM="$SCCM",MAXCHUNKS="$MAXCHUNKS",NICE="${NICE:-0}",CHAIN_TIME="${CHAIN_TIME:-00:15:00}",EXCLUDE="${EXCLUDE:-}" "$SCRIPT") && break
+           --ntasks="$SLURM_NTASKS" --nodes="${CHAIN_NODES:-1}" \
+           --export=ALL,SCCM="$SCCM",MAXCHUNKS="$MAXCHUNKS",NICE="${NICE:-0}",CHAIN_TIME="${CHAIN_TIME:-00:15:00}",EXCLUDE="${EXCLUDE:-}",GRIDREF="$GRIDREF",RUNBASE="$RUNBASE",SIM_S="${SIM_S:-}",WINDOW="${WINDOW:-}",CHAIN_NODES="${CHAIN_NODES:-1}",INPUT="$INPUT",PORTREF="$PORTREF",FNUM_SET="${FNUM_SET:-}",DT_SET="${DT_SET:-}" "$SCRIPT") && break
     sleep 30
   done
   echo "$(date) job $SLURM_JOB_ID: queued next ${next:-FAILED}" | tee -a "$RUNDIR/scan.log"
@@ -107,14 +123,14 @@ done
 REMAIN=$(( (TOTAL - LAST) / DUMPFREQ ))
 if [ "$REMAIN" -le 0 ]; then echo "already complete at step $LAST" | tee -a scan.log; exit 0; fi
 N=$REMAIN; [ "$MAXCHUNKS" -gt 0 ] && [ "$MAXCHUNKS" -lt "$N" ] && N=$MAXCHUNKS
-echo "SCCM=$SCCM MDOT=$MDOT FILLN=$FILLN FNUM=$FNUM DT=$DT DUMPFREQ=$DUMPFREQ TOTAL=$TOTAL" >> scan.log
-COMMON="-var MDOT $MDOT -var FILLN $FILLN -var FNUM $FNUM -var DT $DT \
+echo "SCCM=$SCCM MDOT=$MDOT FILLN=$FILLN FNUM=$FNUM DT=$DT DUMPFREQ=$DUMPFREQ TOTAL=$TOTAL GRIDREF=$GRIDREF INPUT=$INPUT PORTREF=$PORTREF NP=$SLURM_NTASKS" >> scan.log
+COMMON="-var MDOT $MDOT -var FILLN $FILLN -var FNUM $FNUM -var DT $DT -var REFINE $GRIDREF -var PREF $PORTREF \
         -var DUMPFREQ $DUMPFREQ -var CHECKPOINT_STEPS $DUMPFREQ -var NCHUNKS $N"
 
 if [ "$LAST" -eq 0 ]; then
   echo "$(date) job $SLURM_JOB_ID ($SLURM_JOB_PARTITION): fresh start, $N of $REMAIN chunks" | tee -a scan.log
   mpirun -np "$SLURM_NTASKS" "$HOME/opt/sparta-27Aug2026/bin/spa_mpi" \
-    -in in.ne_fluor3d_sealed_run $COMMON &> run.log
+    -in in.ne_fluor3d_${INPUT}_run $COMMON &> run.log
 else
   # drop any frames dumped after the checkpoint (including a truncated one)
   if [ -f field.grid ]; then
@@ -124,7 +140,7 @@ else
   fi
   echo "$(date) job $SLURM_JOB_ID ($SLURM_JOB_PARTITION): resume from step $LAST, $N of $REMAIN chunks" | tee -a scan.log
   mpirun -np "$SLURM_NTASKS" "$HOME/opt/sparta-27Aug2026/bin/spa_mpi" \
-    -in in.ne_fluor3d_sealed_resume -var RESTARTFILE "restart.%.$LAST" $COMMON &>> run.log
+    -in in.ne_fluor3d_${INPUT}_resume -var RESTARTFILE "restart.%.$LAST" $COMMON &>> run.log
 fi
 rc=$?
 echo "$(date) job $SLURM_JOB_ID: solver exit code $rc" | tee -a scan.log
