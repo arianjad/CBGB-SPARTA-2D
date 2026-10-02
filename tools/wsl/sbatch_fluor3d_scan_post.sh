@@ -13,7 +13,7 @@
 #   1. asymmetry.txt: half-space asymmetry and settling check over the last
 #      75 ms (tools/fluor3d_asymmetry.py).
 #   2. frozen.grid: the last 20 ms time-averaged into one frame
-#      (tools/field3d_freeze_avg.py).
+#      (tools/field3d_freeze_stream.py; same result as field3d_freeze_avg.py).
 #   3. tracer_<cond>.out and tracer_summary.txt: the BaF+ tracer at the
 #      three handoff cross-section conditions (energy-dependent default, and
 #      constant 2.0e-18 and 1.5e-19), classified by tools/tracer_classify3d.py.
@@ -41,8 +41,15 @@ OUT="$RUNDIR/post"; mkdir -p "$OUT"
 
 source tools/wsl/site_env.sh; site_python   # ORCD or subMIT
 source .venv/bin/activate
-python tools/fluor3d_asymmetry.py "$RUNDIR/field.grid" "$NASYM" > "$OUT/asymmetry.txt"
-python tools/field3d_freeze_avg.py "$RUNDIR/field.grid" --out "$OUT/frozen.grid" --span-steps "$SPAN" --max-frames "$NFREEZE"
+# streaming freeze (one frame in memory; identical output to field3d_freeze_avg.py, which
+# needed >400 GB on the 11.5M-cell grid); it also prints the chamber summary line.
+# ASYM_FRAMES=0 skips the full asymmetry check, which loads all its frames at once.
+python tools/field3d_freeze_stream.py "$RUNDIR/field.grid" --out "$OUT/frozen.grid" --span-steps "$SPAN" --max-frames "$NFREEZE" > "$OUT/freeze.log"
+if [ "$NASYM" -gt 0 ]; then
+  python tools/fluor3d_asymmetry.py "$RUNDIR/field.grid" "$NASYM" > "$OUT/asymmetry.txt"
+else
+  grep "=== chamber" "$OUT/freeze.log" > "$OUT/asymmetry.txt"
+fi
 cp -n cases/fluor-cell-3d/cell_fluor3d_sealed.surf "$OUT/"
 
 # NPART=0: field prep only -- run the tracer afterwards in pieces with
