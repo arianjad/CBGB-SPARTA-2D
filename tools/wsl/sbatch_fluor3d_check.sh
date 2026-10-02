@@ -1,6 +1,5 @@
 #!/bin/bash
 #SBATCH --job-name=fluor3d-check
-#SBATCH --account=mit_general
 #SBATCH --partition=mit_quicktest
 #SBATCH --nodes=1
 #SBATCH --ntasks=8

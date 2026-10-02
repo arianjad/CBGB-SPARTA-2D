@@ -1,6 +1,5 @@
 #!/bin/bash
 #SBATCH --job-name=fluor3d-scan-post
-#SBATCH --account=mit_general
 #SBATCH --partition=mit_quicktest
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
@@ -40,8 +39,7 @@ RUNDIR="$HOME/orcd/scratch/cbgb-sparta-3d/${RUNBASE:-fluor-scan}/sccm$SCCM"
 [ "$SCCM" = 4 ] && RUNDIR="$HOME/orcd/scratch/cbgb-sparta-3d/fluor-cell-3d-ne-sealed"
 OUT="$RUNDIR/post"; mkdir -p "$OUT"
 
-module purge
-module load deprecated-modules gcc/12.2.0-x86_64 python/3.10.8-x86_64
+source tools/wsl/site_env.sh; site_python   # ORCD or subMIT
 source .venv/bin/activate
 python tools/fluor3d_asymmetry.py "$RUNDIR/field.grid" "$NASYM" > "$OUT/asymmetry.txt"
 python tools/field3d_freeze_avg.py "$RUNDIR/field.grid" --out "$OUT/frozen.grid" --span-steps "$SPAN" --max-frames "$NFREEZE"

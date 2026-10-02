@@ -1,6 +1,5 @@
 #!/bin/bash
 #SBATCH --job-name=fluor3d-scan
-#SBATCH --account=mit_general
 #SBATCH --partition=mit_quicktest
 #SBATCH --nodes=1
 #SBATCH --ntasks=40
@@ -59,8 +58,7 @@
 
 set -uo pipefail
 cd "$SLURM_SUBMIT_DIR"
-module purge
-module load gcc/12.2.0 openmpi/4.1.4
+source "$SLURM_SUBMIT_DIR/tools/wsl/site_env.sh"; site_mpi   # ORCD or subMIT modules
 
 : "${SCCM:?pass SCCM=<flow> via --export}"
 source "$SLURM_SUBMIT_DIR/tools/wsl/fluor3d_flow_params.sh"

@@ -1,6 +1,5 @@
 #!/bin/bash
 #SBATCH --job-name=fluor3d-run
-#SBATCH --account=mit_general
 #SBATCH --partition=mit_normal
 #SBATCH --nodes=1
 #SBATCH --ntasks=40

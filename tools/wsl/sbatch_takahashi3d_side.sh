@@ -1,6 +1,5 @@
 #!/bin/bash
 #SBATCH --job-name=tak3d-side
-#SBATCH --account=mit_general
 #SBATCH --partition=mit_quicktest
 #SBATCH --nodes=1
 #SBATCH --ntasks=40

@@ -1,6 +1,5 @@
 #!/bin/bash
 #SBATCH --job-name=fluor3d-tracer
-#SBATCH --account=mit_general
 #SBATCH --partition=mit_quicktest
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
