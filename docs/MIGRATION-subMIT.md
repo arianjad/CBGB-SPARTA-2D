@@ -1,101 +1,142 @@
-# Moving CBGB-SPARTA-2D (fluor-cell-3d work) from ORCD Engaging to MIT subMIT
+# Moving the fluor-cell-3d work from ORCD Engaging to MIT subMIT
 
-Prepared 2026-10-01 on ORCD. On ORCD, `tools/migrate/make_migration_package.sh`
-builds a migration package in `~/orcd/scratch/cbgb-migrate/`. This file is that
-package's README. Replace `<user>` with your subMIT username and `<u>` with
-its first letter.
+Built on ORCD by `tools/migrate/make_migration_package.sh` into
+`~/orcd/scratch/cbgb-migrate/` (this file is that package's README.md).
 
-## What is in the package (~6 GB)
+Target layout on subMIT (user heeric):
+- repo root: `/work/submit/heeric/buffer_gas` (start Claude here)
+- Claude memory: `~/.claude/projects/-work-submit-heeric-buffer-gas/memory/`
+- data: `/ceph/submit/data/user/h/heeric/cbgb-sparta-3d`, reached through the
+  symlink `~/orcd/scratch` so all scripts work unchanged
+
+## Package contents (~6 GB)
 
 | File | Contents |
 |---|---|
-| `CBGB-SPARTA-2D.bundle` | The whole git repo, every branch and commit, including commits never pushed to GitHub |
-| `cbgb-sparta-3d-post.tar` | Post-processed simulation data. Every flow's `post/` (frozen neon fields `frozen.grid`, all BaF+ tracer outputs, asymmetry checks), the 4 SCCM reference, and the grid-convergence runs. Also the run inputs and `scan.log`s. NOT included: the raw `field.grid` dumps (~250 GB) and restart files; they stay on ORCD scratch. |
-| `results-figures.tar` | `results/figures` + `results/exports` (plots, summary CSVs, GIFs) |
-| `julia-1.9.4-linux-x86_64.tar.gz` | The Julia version the tracer uses |
-| `claude/` | Claude Code memory notes, settings.json, past session transcripts |
+| `CBGB-SPARTA-2D.bundle` | the whole git repo: all branches/commits, including commits never pushed to GitHub |
+| `cbgb-sparta-3d-post.tar` | every flow's `post/`: frozen neon fields, all BaF+ tracer outputs, asymmetry checks; run inputs and scan logs. NOT the raw `field.grid` dumps or restarts (~280 GB, they stay on ORCD) |
+| `results-figures.tar` | `results/figures` + `results/exports` |
+| `julia-1.9.4-linux-x86_64.tar.gz` | Julia for the tracer |
+| `claude/` | memory notes, `settings.json`, old session transcripts (`transcripts.tgz`) |
+| `setup_on_submit.sh` | puts everything above in place on subMIT |
 
-## Step 1: subMIT access (once)
+## Step 1: copy the package to subMIT
 
-1. Make sure you can `ssh <user>@submit.mit.edu`. If you can't, upload a public key at
-   https://submit-portal.mit.edu/.
-2. To copy straight from ORCD, the ORCD account needs a key subMIT accepts. On ORCD:
-   `ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_submit`, then upload
-   `~/.ssh/id_ed25519_submit.pub` on the subMIT portal too.
-
-## Step 2: copy the package (run on ORCD, ~6 GB)
-
+Option A runs on subMIT and needs no new keys. You'll get a password/Duo prompt
+for ORCD:
 ```bash
-# on orcd-login (rsync resumes if interrupted: just rerun it)
+mkdir -p /ceph/submit/data/user/h/heeric/cbgb-migrate
+rsync -av --partial --progress heeric@orcd-login.mit.edu:orcd/scratch/cbgb-migrate/ \
+      /ceph/submit/data/user/h/heeric/cbgb-migrate/
+```
+If the ORCD path doesn't resolve, use the absolute path
+`/orcd/scratch/orcd/013/heeric/cbgb-migrate/`. Rerun the same command to resume
+an interrupted copy.
+
+Option B is a push from ORCD. First upload the ORCD public key
+`~/.ssh/id_ed25519_submit.pub` at https://submit-portal.mit.edu/, then on ORCD:
+```bash
 rsync -av --partial --progress -e "ssh -i ~/.ssh/id_ed25519_submit" \
-  ~/orcd/scratch/cbgb-migrate/ <user>@submit.mit.edu:/ceph/submit/data/user/<u>/<user>/cbgb-migrate/
+  ~/orcd/scratch/cbgb-migrate/ heeric@submit.mit.edu:/ceph/submit/data/user/h/heeric/cbgb-migrate/
 ```
 
-## Step 3: set up subMIT (run on submit.mit.edu)
+## Step 2: unpack and place everything (on subMIT)
 
 ```bash
-C=/ceph/submit/data/user/<u>/<user>      # 1 TB, data
-W=/work/submit/<user>                    # 100 GB, code + software (home is only 10 GB)
+cd /ceph/submit/data/user/h/heeric/cbgb-migrate
+bash setup_on_submit.sh /work/submit/heeric/buffer_gas
+```
 
-# 3a. repo (keep code in /work, not /ceph)
-cd $W && git clone $C/cbgb-migrate/CBGB-SPARTA-2D.bundle CBGB-SPARTA-2D
-cd CBGB-SPARTA-2D && git checkout experiments
-git remote set-url origin git@github.com:heericmc/sparta.git   # needs a GitHub key on subMIT (deploy key or your own)
-tar -xf $C/cbgb-migrate/results-figures.tar                    # -> results/figures, results/exports
+The script:
+- clones the repo into `/work/submit/heeric/buffer_gas`, branch `experiments`;
+- unpacks figures, Julia and the data;
+- creates the `~/orcd/scratch` link;
+- copies the memory notes to `~/.claude/projects/-work-submit-heeric-buffer-gas/memory/`;
+- adds `export SBATCH_PARTITION=submit` to `~/.bashrc`.
 
-# 3b. data: every script uses ~/orcd/scratch/cbgb-sparta-3d, so point that at /ceph
-mkdir -p $C/cbgb-sparta-3d && tar -C $C/cbgb-sparta-3d -xf $C/cbgb-migrate/cbgb-sparta-3d-post.tar
-mkdir -p ~/orcd && ln -s $C ~/orcd/scratch
+It's safe to re-run. At the end it prints the three build commands below.
 
-# 3c. Slurm: the scripts' "#SBATCH --partition=mit_*" lines are overridden by this
-echo 'export SBATCH_PARTITION=submit' >> ~/.bashrc && source ~/.bashrc
+## Step 3: builds (from /work/submit/heeric/buffer_gas)
 
-# 3d. Julia (the tracer)
-mkdir -p .local && tar -C .local -xzf $C/cbgb-migrate/julia-1.9.4-linux-x86_64.tar.gz
-.local/julia-1.9.4/bin/julia --project=tracer -e 'using Pkg; Pkg.instantiate(); Pkg.precompile()'
-
-# 3e. Python (post-processing/plots); subMIT recommends conda under /work
-#     (install Miniforge into $W/miniforge3 first if you have no conda)
-conda create -y -p $W/conda/cbgb python=3.14
-$W/conda/cbgb/bin/python -m venv .venv
+```bash
+cd /work/submit/heeric/buffer_gas && source ~/.bashrc
+# Julia tracer packages
+sbatch -p submit -c 4 --mem=16G -t 01:00:00 --wrap ".local/julia-1.9.4/bin/julia --project=tracer -e 'using Pkg; Pkg.instantiate(); Pkg.precompile()'"
+# Python env: conda python 3.14 + venv. subMIT recommends conda under /work;
+# install Miniforge into /work/submit/heeric/miniforge3 first if you have no conda.
+conda create -y -p /work/submit/heeric/conda/cbgb python=3.14
+/work/submit/heeric/conda/cbgb/bin/python -m venv .venv
 source .venv/bin/activate && pip install -r requirements-3d-freeze.txt
-
-# 3f. SPARTA, with 64-bit cell IDs (allows the finer 0.10 mm port grid);
-#     build as a batch job, not on the login node. The scripts expect
-#     $HOME/opt/sparta-27Aug2026/bin/spa_mpi (7 MB, fine in home).
-sbatch -p submit -c 8 --mem=16G -t 01:00:00 --wrap "module load mpi; \
-  SPARTA_BIGBIG=1 RUN_TESTS=0 BUILD_JOBS=8 SPARTA_SRC_ROOT=$W/src/sparta-27Aug2026 \
-  SPARTA_BUILD_ROOT=$W/build/sparta-27Aug2026 bash tools/wsl/build_sparta_plain.sh"
+# SPARTA with 64-bit cell IDs (allows the 0.10 mm port grid), installed at
+# $HOME/opt/sparta-27Aug2026 where the scripts expect it
+sbatch -p submit -c 8 --mem=16G -t 01:00:00 --wrap "module load mpi; SPARTA_BIGBIG=1 RUN_TESTS=0 BUILD_JOBS=8 \
+  SPARTA_SRC_ROOT=/work/submit/heeric/src/sparta-27Aug2026 SPARTA_BUILD_ROOT=/work/submit/heeric/build/sparta-27Aug2026 \
+  bash tools/wsl/build_sparta_plain.sh"
 ```
 
-The batch scripts detect subMIT on their own (`tools/wsl/site_env.sh`: `module load mpi`
-there, the ORCD modules here). Node-exclude lists in the instructions name ORCD nodes;
-drop them on subMIT.
+If those builds aren't done yet, the new Claude can run them too. They are in
+its checklist.
 
-## Step 4: Claude Code on subMIT
+## Step 4: Claude Code
 
 ```bash
-curl -fsSL https://claude.ai/install.sh | bash      # then run `claude` and /login
-mkdir -p ~/.claude && cp $C/cbgb-migrate/claude/settings.json ~/.claude/
-# Memory is stored per working directory: the folder name is that directory's path
-# with "/" replaced by "-". Start Claude from the repo, so:
-K=~/.claude/projects/$(echo $W/CBGB-SPARTA-2D | tr / -)
-mkdir -p $K && cp -r $C/cbgb-migrate/claude/memory $K/
-# optional, old transcripts (only needed to scroll back through old sessions):
-# tar -C $K -xzf $C/cbgb-migrate/claude/transcripts.tgz
+curl -fsSL https://claude.ai/install.sh | bash   # if not installed; then /login inside claude
+cd /work/submit/heeric/buffer_gas && claude
 ```
 
-Then `cd $W/CBGB-SPARTA-2D && claude`, and start with:
+Paste this as the first message:
 
-> We just moved this project from ORCD Engaging to subMIT. Read
-> docs/HANDOFF-subMIT.md and your memory notes, check the setup, update the
-> memory notes for subMIT, then continue from where the handoff leaves off.
+```text
+We just moved this project from the ORCD Engaging cluster to MIT subMIT. The previous
+Claude session (on ORCD) wrote a detailed handoff for you.
+
+1. Read docs/HANDOFF-subMIT.md completely before doing anything else. It is your
+   runbook: what the project is, how to run every pipeline stage on subMIT, the
+   results so far, the work in progress, lessons learned, and my preferences.
+   Your memory notes were copied over from ORCD too. Some of their cluster
+   details are now wrong (the handoff's section 7 lists which).
+
+2. Verify the setup with the checklist in handoff section 1: repo/branch, the
+   ~/orcd/scratch -> /ceph symlink, SBATCH_PARTITION=submit, SPARTA (built with
+   64-bit cell IDs), Julia + tracer packages, the Python .venv, and site_env.sh
+   detecting "submit". Finish any build in docs/MIGRATION-subMIT.md step 3 that
+   isn't done. Then run the two small smoke tests (tracer and neon) as batch
+   jobs. Report the results to me as a short list.
+
+3. Update your memory notes for subMIT: replace the ORCD-specific facts
+   (partitions, account, bad-node lists, ~/orcd/.quota, short job chaining) with
+   the subMIT ones from the handoff. Keep the physics results and my
+   preferences.
+
+4. Then continue the grid-convergence work (handoff section 5). Check whether the
+   uniform 0.20 mm (FINE) tracer result came over complete. If not, finish it
+   from the frozen field. Write the "Grid convergence at 17 SCCM" doc section if
+   it isn't there yet, and commit locally. After that, propose the next step:
+   I'm most interested in the 0.10 mm port-refined grid now that SPARTA can be
+   built with 64-bit IDs. Ask me before launching big runs, and ask how large
+   and long I want subMIT jobs to be.
+
+Ground rules: never git push without asking; run heavy work only as batch jobs
+(interactive work under 15 minutes on subMIT); watch disk quota (quota -s);
+during long runs check every 30 minutes and give me one-line updates.
+```
 
 ## What stays on ORCD
 
-- Raw neon `field.grid` dumps (coarse flow scan ~160 GB, uniform 0.20 mm grid-convergence
-  run ~100 GB) and the Takahashi validation run: `~/orcd/scratch/cbgb-sparta-3d/`.
-  Only needed to re-freeze over a different time window or to make field plots.
-- ORCD scratch is not backed up. Copy anything you want to keep before leaving.
+The raw neon `field.grid` dumps (coarse flow scan ~160 GB, uniform 0.20 mm run
+~180 GB) and the Takahashi validation run, in
+`~/orcd/scratch/cbgb-sparta-3d/`. They are only needed to re-freeze over a
+different time window or to make field plots. ORCD scratch is not backed up.
 </content>
 </invoke>
+<invoke name="Bash">
+<parameter name="command">[ -f ~/.ssh/id_ed25519_submit ] || ssh-keygen -q -t ed25519 -N "" -C "heeric@orcd-for-submit" -f ~/.ssh/id_ed25519_submit; cat ~/.ssh/id_ed25519_submit.pub; cd ~/CBGB-SPARTA-2D && git add docs/MIGRATION-subMIT.md docs/HANDOFF-subMIT.md tools/migrate/ && git commit -q -m "Migration: setup_on_submit.sh, target /work/submit/heeric/buffer_gas
+
+setup_on_submit.sh clones the bundle into the target folder (the repo root
+where Claude starts), unpacks figures/Julia/data, links ~/orcd/scratch to
+/ceph, and copies the memory notes to the matching
+~/.claude/projects/<path-key>/memory. README/handoff updated for that
+layout, with pull (from subMIT) and push (from ORCD) copy options and the
+full first message for the new session.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1 | cat && bash tools/migrate/make_migration_package.sh 2>&1 | grep -E "setup_on|README|ready"

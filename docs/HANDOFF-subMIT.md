@@ -38,10 +38,10 @@ checks that they worked.
 ## 1. Verify the environment (do this first, report results in one short list)
 
 Paths: `W=/work/submit/$USER`, `C=/ceph/submit/data/user/<u>/$USER`.
-The repo is `$W/CBGB-SPARTA-2D`, branch `experiments`.
+The repo root is `$W/buffer_gas` (= /work/submit/heeric/buffer_gas), branch `experiments`.
 
 ```bash
-cd $W/CBGB-SPARTA-2D
+cd $W/buffer_gas
 git log --oneline -3              # should include this handoff commit and 0414bb1 (streaming freeze)
 ls -l ~/orcd/scratch              # symlink -> $C ; all scripts use ~/orcd/scratch/cbgb-sparta-3d
 ls ~/orcd/scratch/cbgb-sparta-3d  # fluor-scan  fluor-scan-fine  fluor-scan-ports  fluor-cell-3d-ne-sealed

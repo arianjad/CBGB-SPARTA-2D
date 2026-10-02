@@ -34,6 +34,7 @@ rm -rf "$OUT/claude/memory"; cp -r "$P/memory" "$OUT/claude/memory"
 cp "$HOME/.claude/settings.json" "$OUT/claude/"
 tar -C "$P" -czf "$OUT/claude/transcripts.tgz" --exclude=memory .
 cp "$R/docs/MIGRATION-subMIT.md" "$OUT/README.md"
+cp "$R/tools/migrate/setup_on_submit.sh" "$OUT/"
 
 ls -la "$OUT" "$OUT/claude" | awk 'NF>=9 {printf "%10.2f MB  %s\n", $5/1e6, $9}'
 echo "package ready in $OUT -- copy it with the rsync command in README.md"
