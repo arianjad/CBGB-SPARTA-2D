@@ -29,13 +29,24 @@ import sys
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from tracer_classify3d import CYL_BOX, CYL_OUTLET_X, classify, load  # noqa: E402
+from tracer_classify3d import CYL_BOX, CYL_OUTLET_X, CYL_PORTS_OUTLET_X, classify, load  # noqa: E402
 
 BASE = os.path.expanduser("~/orcd/scratch/cbgb-sparta-3d")
 SITE = "results/dashboard/site"
-FIG = "results/figures/cyl3d_scan"
 FLOWS = [5, 10, 15, 20, 25, 30, 35, 40, 45, 50]
-NEN = 25
+# port configurations (gen_cyl3d.py --config); the first is shown when the page loads
+CONFIGS = [
+    dict(key="ports", label="Old-cell ports",
+         desc="2.54 mm inlet through a 1.27 mm wall, 3.175 mm outlet through a 5.33 mm channel (the fluor-cell-3d ports). "
+              "Fixed 0.4 mm DSMC lattice; time step below the local collision time everywhere.",
+         runbase="cyl-ports", job="ports", fig="results/figures/cyl3d_ports", run="run/ports", outlet=CYL_PORTS_OUTLET_X,
+         nen=20, energies="0.25–5 keV in 250 eV steps"),
+    dict(key="ap5", label="5 mm apertures",
+         desc="5 mm apertures through 1.27 mm plates (stopped 2026-10-03 after 5–15 SCCM: the gas is ~5x thinner than the "
+              "old cell at the same flow, so ions crossed without stopping). Lattice ≤ 2 mean free paths per flow.",
+         runbase="cyl-scan", job="cyl", fig="results/figures/cyl3d_scan", run="run", outlet=CYL_OUTLET_X,
+         nen=25, energies="0.2–5 keV in 200 eV steps"),
+]
 AMU, EV = 1.66054e-27, 1.602177e-19
 GIF_W = 560
 INK, MUTED, C1 = "#1f1f1e", "#6b6a66", "#2a78d6"
@@ -61,12 +72,12 @@ def x1_of(paths):
     return np.concatenate([pd.read_csv(p, comment="#").x_1eV.to_numpy(dtype=float) for p in paths])
 
 
-def run_stats(d, cond, E):
+def run_stats(d, cond, E, outlet):
     paths = sorted(glob.glob(f"{d}/post/tracer_{cond}-e{E}_s*.out"))
     r = load(paths)
     if len(r) == 0:
         return None
-    tr, lost, wall = classify(r, CYL_OUTLET_X, CYL_BOX)
+    tr, lost, wall = classify(r, outlet, CYL_BOX)
     ke = 0.5 * 156.325 * AMU * np.sum(r[:, 7:10] ** 2, axis=1) / EV
     th = tr & (ke < 0.1)
     s = dict(E=E, n=len(r), extr=wilson(tr.sum(), len(r)), therm=wilson(th.sum(), len(r)),
@@ -133,12 +144,12 @@ def small_gif(src, out):
     fr[0].save(out, save_all=True, append_images=fr[1:], duration=im.info.get("duration", 83), loop=0, optimize=True)
 
 
-def flow_row(f, runbase, jobs):
+def flow_row(f, runbase, jobs, jobpfx):
     d = f"{BASE}/{runbase}/sccm{f}"
     log = open(f"{d}/scan.log").read() if os.path.exists(f"{d}/scan.log") else ""
     rule = open(f"{d}/post/rule_check.txt").read() if os.path.exists(f"{d}/post/rule_check.txt") else ""
     m = re.search(r"REFINE=\d+ \(([\d.]+) mm\)", log)
-    st = jobs.get(f"cyl-ne{f}", "")
+    st = jobs.get(f"{jobpfx}-ne{f}", "")
     if "solver exit code 0" in log and os.path.exists(f"{d}/post/frozen.grid"):
         neon = "done"
     elif st:
@@ -168,7 +179,6 @@ def fhash(p):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--runbase", default="cyl-scan")
     ap.add_argument("--cond", default="table-central")
     ap.add_argument("--mark-published", action="store_true")
     a = ap.parse_args()
@@ -187,41 +197,48 @@ def main():
         p = line.split()
         if len(p) == 2:
             jobs[p[0]] = p[1]
-    flows = []
-    for f in FLOWS:
-        row = flow_row(f, a.runbase, jobs)
-        d = f"{BASE}/{a.runbase}/sccm{f}"
-        Es = sorted({int(re.search(r"-e(\d+)_s", p).group(1)) for p in glob.glob(f"{d}/post/tracer_{a.cond}-e*_s*.out")})
-        for E in Es:
-            res = run_stats(d, a.cond, E)
-            if res is None:
-                continue
-            s, r, tr, ke = res
-            png = f"{SITE}/run/{f}_{E}.png"
-            if not os.path.exists(png):
-                run_figure(d, a.cond, E, f, r, tr, ke, png)
-            s["png"] = f"run/{f}_{E}.png"
-            src = f"{d}/post/gif/sccm{f}_{a.cond}_e{E}.gif"
-            gif = f"{SITE}/run/{f}_{E}.gif"
-            if os.path.exists(src) and not os.path.exists(gif):
-                small_gif(src, gif)
-            s["gif"] = f"run/{f}_{E}.gif" if os.path.exists(gif) else None
-            row["runs"].append(s)
-        th = [(x["therm"][0], x["E"]) for x in row["runs"] if x["therm"][0] is not None]
-        row["best"] = max(th) if th else None
-        flows.append(row)
-    figs = []
-    for suf, cap in [("_surface.png", "Extraction (%) over flow × beam energy: all extracted ions, and those leaving below 0.1 eV."),
-                     ("_heatmap.png", "The same grids with values."),
-                     ("_dedx.png", "Energy loss per ion vs depth (the Bragg curve) at 1–5 keV."),
-                     ("_stopdepth.png", "Mean depth where ions first drop below 1 eV, vs beam energy, per flow.")]:
-        if os.path.exists(FIG + suf):
-            dst = f"{SITE}/fig/cyl3d_scan{suf}"
-            if not os.path.exists(dst) or fhash(dst) != fhash(FIG + suf):
-                with open(FIG + suf, "rb") as fi, open(dst, "wb") as fo:
-                    fo.write(fi.read())
-                os.utime(dst, (os.stat(FIG + suf).st_atime, os.stat(FIG + suf).st_mtime))
-            figs.append(dict(src=f"fig/cyl3d_scan{suf}", cap=cap))
+    cfgs = []
+    for c in CONFIGS:
+        os.makedirs(f"{SITE}/{c['run']}", exist_ok=True)
+        flows = []
+        for f in FLOWS:
+            row = flow_row(f, c["runbase"], jobs, c["job"])
+            d = f"{BASE}/{c['runbase']}/sccm{f}"
+            Es = sorted({int(re.search(r"-e(\d+)_s", p).group(1)) for p in glob.glob(f"{d}/post/tracer_{a.cond}-e*_s*.out")})
+            for E in Es:
+                res = run_stats(d, a.cond, E, c["outlet"])
+                if res is None:
+                    continue
+                st, r, tr, ke = res
+                png = f"{SITE}/{c['run']}/{f}_{E}.png"
+                if not os.path.exists(png):
+                    run_figure(d, a.cond, E, f, r, tr, ke, png)
+                st["png"] = f"{c['run']}/{f}_{E}.png"
+                src = f"{d}/post/gif/sccm{f}_{a.cond}_e{E}.gif"
+                gif = f"{SITE}/{c['run']}/{f}_{E}.gif"
+                if os.path.exists(src) and not os.path.exists(gif):
+                    small_gif(src, gif)
+                st["gif"] = f"{c['run']}/{f}_{E}.gif" if os.path.exists(gif) else None
+                row["runs"].append(st)
+            th = [(x["therm"][0], x["E"]) for x in row["runs"] if x["therm"][0] is not None]
+            row["best"] = max(th) if th else None
+            flows.append(row)
+        figs = []
+        base = os.path.basename(c["fig"])
+        for suf, cap in [("_surface.png", "Extraction (%) over flow × beam energy: all extracted ions, and those leaving below 0.1 eV."),
+                         ("_heatmap.png", "The same grids with values."),
+                         ("_dedx.png", "Energy loss per ion vs depth (the Bragg curve) at 1–5 keV."),
+                         ("_stopdepth.png", "Mean depth where ions first drop below 1 eV, vs beam energy, per flow.")]:
+            if os.path.exists(c["fig"] + suf):
+                dst = f"{SITE}/fig/{base}{suf}"
+                if not os.path.exists(dst) or fhash(dst) != fhash(c["fig"] + suf):
+                    with open(c["fig"] + suf, "rb") as fi, open(dst, "wb") as fo:
+                        fo.write(fi.read())
+                    os.utime(dst, (os.stat(c["fig"] + suf).st_atime, os.stat(c["fig"] + suf).st_mtime))
+                figs.append(dict(src=f"fig/{base}{suf}", cap=cap))
+        cfgs.append(dict(key=c["key"], label=c["label"], desc=c["desc"], nen=c["nen"], energies=c["energies"],
+                         flows=flows, figs=figs, traced=sum(len(x["runs"]) for x in flows)))
+    common = []
     xs = "results/figures/cross_sections.png"     # tools/plot_cross_sections.py
     if os.path.exists(xs):
         dst = f"{SITE}/fig/cross_sections.png"
@@ -229,26 +246,27 @@ def main():
             with open(xs, "rb") as fi, open(dst, "wb") as fo:
                 fo.write(fi.read())
             os.utime(dst, (os.stat(xs).st_atime, os.stat(xs).st_mtime))
-        figs.append(dict(src="fig/cross_sections.png",
+        common.append(dict(src="fig/cross_sections.png",
                          cap="Cross sections. Left: BaF⁺–Ne vs beam energy: old 1/v model with its floor vs the computed "
                              "table now used. Right: Ne–Ne through the viscosity it implies: Bird's room-temperature "
                              "parameters (old runs) vs ab initio values and the new fit (cylinder runs)."))
     ceph = sh("getfattr -n ceph.dir.rbytes --only-values /ceph/submit/data/user/h/$USER 2>/dev/null").strip()
     meta = dict(updated=datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
                 running=sum(v == "RUNNING" for v in jobs.values()), queued=sum(v == "PENDING" for v in jobs.values()),
-                traced=sum(len(x["runs"]) for x in flows), total=len(FLOWS) * NEN,
+
                 ceph=f"{int(ceph)/1e9:.0f} GB of 1 TB" if ceph.isdigit() else "n/a")
     tmpl = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "cyl3d_dashboard_template.html")).read()
-    data = json.dumps(dict(meta=meta, flows=flows, figs=figs)).replace("</", "<\\/")
+    data = json.dumps(dict(meta=meta, configs=cfgs, common=common)).replace("</", "<\\/")
     open(f"{SITE}/index.html", "w").write(tmpl.replace("/*__DATA__*/null", data))
     todo = {}
-    for p in sorted(glob.glob(f"{SITE}/fig/*.png") + glob.glob(f"{SITE}/run/*")):
+    for p in sorted(glob.glob(f"{SITE}/fig/*.png") + glob.glob(f"{SITE}/run/*.*") + glob.glob(f"{SITE}/run/*/*.*")):
         rel = os.path.relpath(p, SITE)
         if manifest.get(rel) != fhash(p):
             todo[rel] = p
     json.dump(todo, open(f"{SITE}/to_publish.json", "w"), indent=0)
-    size = sum(os.path.getsize(p) for p in glob.glob(f"{SITE}/fig/*") + glob.glob(f"{SITE}/run/*"))
-    print(f"wrote {SITE}/index.html; {meta['traced']} runs; {len(todo)} files to publish; site files {size/1e6:.0f} MB")
+    size = sum(os.path.getsize(p) for p in glob.glob(f"{SITE}/fig/*") + glob.glob(f"{SITE}/run/*.*") + glob.glob(f"{SITE}/run/*/*.*"))
+    runs = ", ".join(f"{c['key']} {c['traced']}" for c in cfgs)
+    print(f"wrote {SITE}/index.html; runs {runs}; {len(todo)} files to publish; site files {size/1e6:.0f} MB")
 
 
 if __name__ == "__main__":

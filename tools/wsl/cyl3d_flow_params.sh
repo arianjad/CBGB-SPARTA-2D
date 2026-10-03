@@ -2,6 +2,17 @@
 # sbatch_cyl3d_neon.sh, sbatch_cyl3d_post.sh and submit_cyl3d_campaign.sh.
 # Source it, then call
 #   cyl_flow_params <SCCM>
+# CONFIG selects the port geometry (gen_cyl3d.py --config), default ports:
+#   ports  2.54 mm inlet (1.27 mm wall) + 3.175 mm x 5.334 mm outlet (the fluor-cell-3d
+#          ports), data in cyl-ports. Expected density 1.26e21 m^-3 per SCCM (measured
+#          on the old cell: 2.15e22 at 17 SCCM). Fixed 0.4 mm lattice (KNMIN 0): a
+#          cell <= 2 lambda grid would cost ~5M core-h at these densities; the old
+#          17 SCCM test found 0.41 and 0.20 mm grids agree on extraction. dt < tau
+#          stays strict. 0.3 s simulated (gas residence time ~0.13 s).
+#   ap5    5 mm apertures through 1.27 mm plates, data in cyl-scan (2026-10-03 run,
+#          stopped after 5-15 SCCM): 2.9e20 per SCCM, KNMIN 0.5, 0.1 s.
+# It also sets KN (the KNMIN in effect), SIMS (simulated seconds), SURF, XOUT (outlet face x, m), AEFF_MM2 (Clausing-weighted port area
+# for the aperture-law check) and RUNBASE_DEF.
 # It sets MDOT (kg/s), FILLN, FNUM, DT, REFINE, CELL_MM, ADAPT_STEPS, NADAPT,
 # WINDOW (averaging window = checkpoint interval, steps), TOTAL (production
 # steps for SIM_S simulated seconds, default 0.1 s), and a job size
@@ -35,12 +46,20 @@
 #   windows write field.grid frames (storage).
 cyl_flow_params() {
   local f=$1
-  read MDOT FILLN FNUM DT REFINE CELL_MM ADAPT_STEPS WINDOW NPART_EST NCELL_EST <<<"$(python3 - "$f" "${PPC:-5}" "${KNMIN:-0.5}" "$(dirname "${BASH_SOURCE[0]}")/../../cases/cyl-3d/ne.vss" <<'EOF'
+  CONFIG="${CONFIG:-ports}"
+  case "$CONFIG" in
+    ports) NPER=1.26e21; KN="${KNMIN:-0}"; SIMS="${SIM_S:-0.3}"; SURF=cell_cyl3d_ports.surf; XOUT=0.050804
+           AEFF_MM2=6.6; RUNBASE_DEF=cyl-ports ;;
+    ap5)   NPER=2.9e20; KN="${KNMIN:-0.5}"; SIMS="${SIM_S:-0.1}"; SURF=cell_cyl3d.surf; XOUT=0.04674
+           AEFF_MM2=39.27; RUNBASE_DEF=cyl-scan ;;
+    *) echo "unknown CONFIG $CONFIG" >&2; return 2 ;;
+  esac
+  read MDOT FILLN FNUM DT REFINE CELL_MM ADAPT_STEPS WINDOW NPART_EST NCELL_EST <<<"$(python3 - "$f" "${PPC:-5}" "$KN" "$NPER" "$(dirname "${BASH_SOURCE[0]}")/../../cases/cyl-3d/ne.vss" <<'EOF'
 import math, sys
-f, ppc, knmin, vss = float(sys.argv[1]), float(sys.argv[2]), float(sys.argv[3]), sys.argv[4]
+f, ppc, knmin, nper, vss = float(sys.argv[1]), float(sys.argv[2]), float(sys.argv[3]), float(sys.argv[4]), sys.argv[5]
 d, w, tref = [float(x) for x in next(l for l in open(vss) if l.split() and l.split()[0] == "Ne").split()[1:4]]
 kB, m, T = 1.380649e-23, 20.1797 * 1.66053907e-27, 23.0
-n = 2.9e20 * f
+n = nper * f
 cbar = math.sqrt(8 * kB * T / (math.pi * m))
 lam = 1 / (math.pi * math.sqrt(2) * d**2 * n * (tref / T)**(w - 0.5))       # SPARTA lambda/grid, one species
 mr = m / 2
@@ -65,7 +84,7 @@ EOF
     ADAPT_STEPS=$(python3 -c "print(max(1000, int(round(2.5e-3/$DT/1000))*1000))")
   fi
   WINDOW="${WINDOW_SET:-$WINDOW}"
-  TOTAL=$(python3 -c "print(max(1, int(round(${SIM_S:-0.1}/$DT/$WINDOW)))*$WINDOW)")
+  TOTAL=$(python3 -c "print(max(1, int(round($SIMS/$DT/$WINDOW)))*$WINDOW)")
   # job size: ~1.5M particles per task (16..48 tasks); walltime from the smoke-test rate
   # (3.35M particle-steps per core-second on submit95) x 2 margin; memory ~0.7 GB per
   # 1M particles + 0.5 GB per 1M cells (smoke test), doubled for refined cells
@@ -73,6 +92,8 @@ EOF
 import math
 npart, ncell, steps = $NPART_EST, $NCELL_EST, $TOTAL + ($NADAPT + 1) * $ADAPT_STEPS
 np_ = min(48, max(16, 16 * math.ceil(npart / 1.5e6 / 16)))
+while np_ < 48 and npart * steps / 3.35e6 / np_ / 3600 > 36:   # keep runs under ~1.5 days
+    np_ += 16
 mem = int(max(32, 2 * (0.7 * npart / 1e6 + 0.5 * (ncell + 1.4e6) / 1e6) + 8))
 hrs = min(144, max(4, math.ceil(2 * npart * steps / 3.35e6 / np_ / 3600)))
 print(np_, mem, f'{hrs//24}-{hrs%24:02d}:00:00')")"

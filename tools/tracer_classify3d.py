@@ -13,6 +13,7 @@ EPS = 1e-5
 # cases/cyl-3d (plain cylinder): outlet aperture outer face (gen_cyl3d.py) and
 # in.ne_cyl3d_run's create_box; pass these to classify() for that case
 CYL_OUTLET_X = 0.04674
+CYL_PORTS_OUTLET_X = 0.050804     # gen_cyl3d.py --config ports (3.175 mm x 5.334 mm outlet)
 CYL_BOX = (-0.0224, 0.0784, -0.0256, 0.0256, -0.0256, 0.0256)
 
 

@@ -35,7 +35,7 @@ import numpy as np
 import pyvista as pv
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from tracer_classify3d import CYL_BOX, CYL_OUTLET_X, classify, load  # noqa: E402
+from tracer_classify3d import CYL_BOX, CYL_OUTLET_X, CYL_PORTS_OUTLET_X, classify, load  # noqa: E402
 from plot_field_3d_slices import read_surf  # noqa: E402
 from export_vtk import build_wall_mesh  # noqa: E402
 
@@ -50,6 +50,8 @@ GEOMS = {
                   camera=[(0.02, -0.17, 0.12), (0.058, 0.02, 0.016), (0, 0, 1)], xmax=0.11),
     "cyl": dict(start=(-0.00127, 0.0, 0.0), classify=(CYL_OUTLET_X, CYL_BOX),
                 camera=[(0.0, -0.17, 0.10), (0.025, 0.0, -0.004), (0, 0, 1)], xmax=0.07),
+    "cylports": dict(start=(-0.00127, 0.0, 0.0), classify=(CYL_PORTS_OUTLET_X, CYL_BOX),
+                     camera=[(0.0, -0.17, 0.10), (0.025, 0.0, -0.004), (0, 0, 1)], xmax=0.07),
 }
 
 

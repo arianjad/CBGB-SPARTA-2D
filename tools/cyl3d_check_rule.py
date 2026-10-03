@@ -20,7 +20,6 @@ import numpy as np
 import pandas as pd
 
 KB, M = 1.380649e-23, 20.1797 * 1.66053907e-27
-A_AP = 2 * math.pi * 2.5e-3**2          # two 5 mm apertures
 SCCM = 4.4615e17                         # molecules/s per SCCM
 
 
@@ -32,6 +31,8 @@ def main():
     ap.add_argument("--sccm", type=float, required=True)
     ap.add_argument("--cellfrac")
     ap.add_argument("--fmin", type=float, default=0.5)
+    ap.add_argument("--aeff-mm2", type=float, default=2 * math.pi * 2.5**2,
+                    help="port area for the aperture law, Clausing-weighted (default: two thin 5 mm apertures)")
     ap.add_argument("--knmin", type=float, default=0.5, help="cell <= lambda / KNMIN (0.5: up to 2 mean free paths)")
     a = ap.parse_args()
     d, w, tref = [float(x) for x in next(l for l in open(a.vss) if l.split() and l.split()[0] == "Ne").split()[1:4]]
@@ -50,7 +51,7 @@ def main():
     lam = 1 / (math.pi * math.sqrt(2) * d**2 * n[gas] * (tref / T[gas])**(w - 0.5))
     tau = 1 / (2 * d**2 * n[gas] * math.sqrt(2 * math.pi * KB * tref / (M / 2)) * (T[gas] / tref)**(1 - w))
     kn = lam / size[gas]
-    bad_kn, bad_dt = kn < a.knmin, tau <= a.dt
+    bad_kn, bad_dt = kn < a.knmin, tau <= a.dt   # knmin 0: fixed lattice, only dt < tau is enforced
     print(f"cells with gas {gas.sum()}; cell sizes {np.unique(np.round(size[gas]*1e3, 4))} mm")
     print(f"Kn_cell: min {kn.min():.3f}, 0.1% quantile {np.quantile(kn, 0.001):.3f}; cells with Kn < {a.knmin}: "
           f"{bad_kn.sum()} ({100*bad_kn.mean():.4f}%)")
@@ -64,7 +65,7 @@ def main():
     vol = np.prod(v[:, 7:10] - v[:, 4:7], axis=1)
     nch = (n * vol)[ch].sum() / vol[ch].sum()
     cbar = math.sqrt(8 * KB * 23.0 / (math.pi * M))
-    neq2 = 4 * a.sccm * SCCM / (cbar * A_AP)
+    neq2 = 4 * a.sccm * SCCM / (cbar * a.aeff_mm2 * 1e-6)
     print(f"chamber <n> {nch:.3e} m^-3 vs aperture law (eq. 2) {neq2:.3e} ({nch/neq2:.2f}x); "
           f"chamber <T> {(n*vol*T)[ch].sum()/(n*vol)[ch].sum():.1f} K")
     ok = not bad_kn.any() and not bad_dt.any()

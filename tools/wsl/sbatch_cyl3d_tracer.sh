@@ -38,7 +38,9 @@ case "$COND" in
   edep) A="--sigma-model edep" ;;
   *) echo "unknown COND $COND"; exit 2 ;;
 esac
-RUNDIR="$HOME/orcd/scratch/cbgb-sparta-3d/${RUNBASE:-cyl-scan}/sccm$SCCM"
+source "$SLURM_SUBMIT_DIR/tools/wsl/cyl3d_flow_params.sh"; cyl_flow_params "$SCCM"   # SURF, RUNBASE_DEF for CONFIG
+GEOM=$([ "$CONFIG" = ports ] && echo cylports || echo cyl)
+RUNDIR="$HOME/orcd/scratch/cbgb-sparta-3d/${RUNBASE:-$RUNBASE_DEF}/sccm$SCCM"
 cd "$RUNDIR/post" || exit 2
 [ -f frozen.grid ] || { echo "no frozen.grid -- run sbatch_cyl3d_post.sh first"; exit 2; }
 JULIA="$SLURM_SUBMIT_DIR/.local/julia-1.9.4/bin/julia"
@@ -50,7 +52,7 @@ for E in $ENERGIES; do
   for attempt in 1 2 3; do   # a fast failure is usually a precompile collision
     t0=$(date +%s)
     "$JULIA" --project="$SLURM_SUBMIT_DIR/tracer" --threads="$SLURM_CPUS_PER_TASK" \
-      "$SLURM_SUBMIT_DIR/tracer/ParticleTracing3D.jl" cell_cyl3d.surf frozen.grid \
+      "$SLURM_SUBMIT_DIR/tracer/ParticleTracing3D.jl" "$SURF" frozen.grid \
       -n "$NPART" -x -0.00127 -y 0 -z 0 --vx "$VX" --vy 0 --vz 0 -T 0 \
       -m 20.1797 -M 156.325 $A --saveall 1 --seed "$SEED" --hist "$tag" --ionlog "${tag}_ions.csv" \
       > "$tag.out.tmp" 2> "$tag.err"
@@ -72,11 +74,11 @@ for E in $ENERGIES; do
   VX=$(awk -v E="$E" 'BEGIN{printf "%.2f", sqrt(2*E*1.602177e-19/(156.325*1.66054e-27))}')
   t0=$(date +%s)
   "$JULIA" --project="$SLURM_SUBMIT_DIR/tracer" --threads="$SLURM_CPUS_PER_TASK" \
-    "$SLURM_SUBMIT_DIR/tracer/ParticleTracing3D.jl" cell_cyl3d.surf frozen.grid \
+    "$SLURM_SUBMIT_DIR/tracer/ParticleTracing3D.jl" "$SURF" frozen.grid \
     -n 40 -x -0.00127 -y 0 -z 0 --vx "$VX" --vy 0 --vz 0 -T 0 \
     -m 20.1797 -M 156.325 $A --saveall 1 --seed 300 --trajprint 40 > "$g.traj" 2> "$g.err" \
-  && python "$SLURM_SUBMIT_DIR/tools/render_fluor3d_trajectories.py" "$g.traj" --surf cell_cyl3d.surf \
-       --out "$g" --geom cyl --sccm "$SCCM" --energy "$E eV" --linear-after 1e-3 > "$g.render.log" 2>&1 \
+  && python "$SLURM_SUBMIT_DIR/tools/render_fluor3d_trajectories.py" "$g.traj" --surf "$SURF" \
+       --out "$g" --geom "$GEOM" --sccm "$SCCM" --energy "$E eV" --linear-after 1e-3 > "$g.render.log" 2>&1 \
   || fail=1
   rm -f "$g.traj"
   echo "$(date) SCCM=$SCCM E=$E eV gif rc=$fail $(( $(date +%s) - t0 )) s"

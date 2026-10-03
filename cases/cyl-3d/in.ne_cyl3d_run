@@ -7,7 +7,9 @@
 # DSMC grid rule, checked in every cell: the time step shorter than the local
 # mean collision time (strict, as in Steinmacher et al., arXiv:2609.11544), and
 # the cell Knudsen number Kn = lambda / mean cell side >= KNMIN (default 0.5,
-# i.e. cells up to 2 mean free paths; the paper uses 1).
+# i.e. cells up to 2 mean free paths; the paper uses 1). KNMIN = 0 keeps the
+# starting lattice fixed (the ports configuration uses the old 0.4 mm lattice:
+# a cell <= 2 lambda grid would cost ~5M core-h there) and checks only dt < tau.
 #
 # Grid, per flow (tools/wsl/cyl3d_flow_params.sh sets REFINE and DT):
 #  1. 1.6 mm base cells; the chamber and an 8 mm x 8 mm-radius region
@@ -28,6 +30,10 @@
 # with field.grid output) with -var.
 
 variable    SEED index 8675309
+variable    SURF index cell_cyl3d.surf   # gen_cyl3d.py --config ap5 (cell_cyl3d.surf) or ports (cell_cyl3d_ports.surf)
+variable    XOUT index 0.04674           # outlet face x (m): 0.04674 ap5, 0.050804 ports
+variable    XCH equal ${XOUT}+0.0016
+variable    XPO equal ${XOUT}+0.0096
 variable    KNMIN index 0.5      # cell <= lambda / KNMIN (0.5: up to 2 mean free paths)
 variable    KREF equal 1.2*${KNMIN}   # refine below this (margin for sampling noise and density still settling)
 variable    TFLOOR index 3.0    # K; floor on the sampled T used for lambda/tau (see below)
@@ -39,9 +45,9 @@ boundary    o o o
 global      gridcut 0.0
 global      surfmax 500
 create_box  -0.0224 0.0784 -0.0256 0.0256 -0.0256 0.0256
-region      CH   cylinder x 0 0 0.0160 -0.0016 0.0484
+region      CH   cylinder x 0 0 0.0160 -0.0016 ${XCH}
 region      PIN  cylinder x 0 0 0.0080 -0.0096 -0.0016
-region      POUT cylinder x 0 0 0.0080 0.0484 0.0564
+region      POUT cylinder x 0 0 0.0080 ${XCH} ${XPO}
 region      CAV  union 3 CH PIN POUT
 create_grid 63 32 32 levels 2 region 2 CAV ${REFINE} ${REFINE} ${REFINE} inside any
 balance_grid rcb cell
@@ -51,7 +57,7 @@ mixture     negas Ne nrho 1.0e22 temp 23.0
 mixture     fillgas Ne nrho ${FILLN} temp 23.0
 global      fnum ${FNUM}
 collide     vss negas ne.vss
-read_surf   cell_cyl3d.surf type group cellwalls clip
+read_surf   ${SURF} type group cellwalls clip
 surf_collide walls diffuse 23.0 1.0
 surf_modify cellwalls collide walls
 group       gasinlet surf type 2

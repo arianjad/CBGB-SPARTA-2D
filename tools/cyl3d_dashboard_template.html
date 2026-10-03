@@ -47,15 +47,22 @@ tr.detail > td { background:var(--panel); padding:12px; white-space:normal }
 figure { margin:0; display:grid; gap:6px } figure img { width:100%; border-radius:6px; background:#fff }
 figcaption { font-size:13px; color:var(--muted) }
 .empty { color:var(--muted); font-style:italic }
+.switch { display:inline-flex; gap:0; border:1px solid var(--line); border-radius:8px; overflow:hidden; margin-top:12px }
+.switch button { font:600 13px var(--body); padding:7px 14px; border:0; background:var(--panel); color:var(--muted); cursor:pointer }
+.switch button + button { border-left:1px solid var(--line) }
+.switch button[aria-pressed="true"] { background:var(--accent); color:#fff }
+.switch button:focus-visible { outline:2px solid var(--accent); outline-offset:-2px }
+.cfgdesc { color:var(--muted); font-size:13px; margin:8px 0 0; max-width:90ch }
 @media (max-width:760px) { .det { grid-template-columns:1fr } }
 @media (prefers-reduced-motion: reduce) { .chev { transition:none } }
 </style>
 <div class="wrap">
 <header>
   <h1>BaF⁺ extraction from a plain cylindrical neon cell</h1>
-  <p class="sub">30.5 mm bore × 45.5 mm chamber, 5 mm apertures, 23 K neon at 5–50 SCCM; BaF⁺ injected on axis at 0.2–5 keV
-  (computed BaF⁺–Ne cross-section table). DSMC lattice: every lattice cell ≤ 2 neon mean free paths and the time step below the local
-  collision time. Click a flow to list its runs; click a run for its trajectories and plots.</p>
+  <p class="sub">30.5 mm bore × 45.5 mm chamber, 23 K neon at 5–50 SCCM; BaF⁺ injected on axis at the inlet port
+  (computed BaF⁺–Ne cross-section table). Click a flow to list its runs; click a run for its trajectories and plots.</p>
+  <div class="switch" role="group" aria-label="Port configuration" id="switch"></div>
+  <p class="cfgdesc" id="cfgdesc"></p>
   <p class="meta" id="meta"></p>
 </header>
 <section class="panel"><h2>Runs</h2><div class="tablewrap"><table id="flows"></table></div></section>
@@ -66,11 +73,11 @@ const DATA = /*__DATA__*/null;
 const TIP = {
   flow: "Neon flow into the cell (standard cubic centimetres per minute).",
   neon: "State of the neon DSMC run for this flow (SPARTA). Percent = progress through the production steps.",
-  lattice: "DSMC lattice spacing in the chamber: the starting spacing, then the refined spacings the run added where the gas was dense (mm). Chosen per flow so every lattice cell is at most 2 mean free paths.",
-  rule: "Post-run check on the averaged field: every lattice cell at most 2 mean free paths across, and the time step shorter than the local mean collision time. Wall-cut slivers are skipped.",
+  lattice: "DSMC lattice spacing in the chamber (mm), and in parentheses any finer spacings the run added where the gas was dense.",
+  rule: "Post-run check on the averaged field: the time step shorter than the local mean collision time in every lattice cell (and, for the 5 mm configuration, every cell at most 2 mean free paths). Wall-cut slivers are skipped.",
   n: "Volume-averaged neon number density in the chamber (m⁻³), from the averaged field.",
-  ratio: "Chamber density divided by the molecular-flow aperture law n = 4Q/(c̄A) (Steinmacher et al. eq. 2).",
-  traced: "Beam energies traced so far, out of 25 (200 eV to 5 keV in 200 eV steps).",
+  ratio: "Chamber density divided by the molecular-flow aperture law n = 4Q/(c̄A) (Steinmacher et al. eq. 2), with A the ports' Clausing-weighted area.",
+  traced: "Beam energies traced so far for this flow.",
   best: "Highest thermalized extraction over the energies traced so far, and the energy where it occurs.",
   E: "BaF⁺ beam energy at injection (lab frame), on axis at the inlet aperture.",
   ions: "Ions traced at this flow and energy.",
@@ -86,36 +93,56 @@ const th = (k, label) => `<th title="${esc(TIP[k])}">${label}<span class="q" ari
 const pct = v => v && v[0] !== null ? `${v[0].toFixed(1)}%` : "–";
 const ci = v => v && v[0] !== null ? `<span class="meta">(${v[1].toFixed(1)}–${v[2].toFixed(1)})</span>` : "";
 const m = DATA.meta;
-document.getElementById("meta").textContent =
-  `Updated ${m.updated} · jobs running ${m.running}, queued ${m.queued} · runs traced ${m.traced} of ${m.total} · /ceph use ${m.ceph}`;
-
 const tbl = document.getElementById("flows");
 const NCOL = 8;
-tbl.innerHTML = `<thead><tr>${th("flow","Flow")}${th("neon","Neon DSMC")}${th("lattice","Lattice")}${th("rule","Grid rule")}` +
-  `${th("n","Chamber n (m⁻³)")}${th("ratio","vs aperture law")}${th("traced","Energies traced")}${th("best","Best thermalized")}</tr></thead><tbody></tbody>`;
-const body = tbl.tBodies[0];
-for (const fl of DATA.flows) {
-  const tr = document.createElement("tr");
-  tr.className = "flow"; tr.tabIndex = 0; tr.setAttribute("role", "button"); tr.setAttribute("aria-expanded", "false");
-  const p = 100 * fl.runs.length / 25;
-  tr.innerHTML = `<td class="num"><span class="chev">▸</span> ${fl.f} SCCM</td>` +
-    `<td><span class="chip ${esc(fl.neon)}">${esc(fl.neon)}${fl.prog ? " " + esc(fl.prog) : ""}</span></td>` +
-    `<td class="num">${fl.lattice ? esc(fl.lattice) + " mm" : ""}${fl.lattices && fl.lattices.split(" / ").length > 1 ? `<span class="meta"> (${esc(fl.lattices)})</span>` : ""}</td>` +
-    `<td>${fl.rule ? `<span class="chip ${fl.rule}">${fl.rule}</span>` : ""}</td>` +
-    `<td class="num">${esc(fl.n)}</td><td class="num">${fl.ratio ? esc(fl.ratio) + "×" : ""}</td>` +
-    `<td><span class="bar"><i style="width:${p}%"></i></span><span class="meta">${fl.runs.length}/25</span></td>` +
-    `<td class="num">${fl.best ? `${fl.best[0].toFixed(1)}% at ${fl.best[1] / 1000} keV` : "–"}</td>`;
-  const sub = document.createElement("tr");
-  sub.className = "runs"; sub.hidden = true;
-  sub.innerHTML = `<td colspan="${NCOL}"></td>`;
-  body.append(tr, sub);
-  const toggle = () => {
-    const open = tr.getAttribute("aria-expanded") !== "true";
-    tr.setAttribute("aria-expanded", String(open)); sub.hidden = !open;
-    if (open && !sub.dataset.built) { buildRuns(fl, sub.firstChild); sub.dataset.built = "1"; }
-  };
-  tr.addEventListener("click", toggle);
-  tr.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } });
+let NEN = 25;
+const sw = document.getElementById("switch");
+for (const [i, c] of DATA.configs.entries()) {
+  const b = document.createElement("button");
+  b.type = "button"; b.id = "cfg-" + c.key; b.textContent = c.label;
+  b.setAttribute("aria-pressed", i === 0 ? "true" : "false");
+  b.addEventListener("click", () => render(c.key));
+  sw.append(b);
+}
+
+function render(key) {
+  const c = DATA.configs.find(x => x.key === key);
+  NEN = c.nen;
+  for (const b of sw.children) b.setAttribute("aria-pressed", String(b.id === "cfg-" + key));
+  document.getElementById("cfgdesc").textContent = `${c.desc} Beam energies: ${c.energies}.`;
+  document.getElementById("meta").textContent =
+    `Updated ${m.updated} · jobs running ${m.running}, queued ${m.queued} · runs traced ${c.traced} of ${10 * c.nen} · /ceph use ${m.ceph}`;
+  tbl.innerHTML = `<thead><tr>${th("flow","Flow")}${th("neon","Neon DSMC")}${th("lattice","Lattice")}${th("rule","Grid rule")}` +
+    `${th("n","Chamber n (m⁻³)")}${th("ratio","vs aperture law")}${th("traced","Energies traced")}${th("best","Best thermalized")}</tr></thead><tbody></tbody>`;
+  const body = tbl.tBodies[0];
+  for (const fl of c.flows) {
+    const tr = document.createElement("tr");
+    tr.className = "flow"; tr.tabIndex = 0; tr.setAttribute("role", "button"); tr.setAttribute("aria-expanded", "false");
+    const p = 100 * fl.runs.length / NEN;
+    tr.innerHTML = `<td class="num"><span class="chev">▸</span> ${fl.f} SCCM</td>` +
+      `<td><span class="chip ${esc(fl.neon)}">${esc(fl.neon)}${fl.prog ? " " + esc(fl.prog) : ""}</span></td>` +
+      `<td class="num">${fl.lattice ? esc(fl.lattice) + " mm" : ""}${fl.lattices && fl.lattices.split(" / ").length > 1 ? `<span class="meta"> (${esc(fl.lattices)})</span>` : ""}</td>` +
+      `<td>${fl.rule ? `<span class="chip ${fl.rule}">${fl.rule}</span>` : ""}</td>` +
+      `<td class="num">${esc(fl.n)}</td><td class="num">${fl.ratio ? esc(fl.ratio) + "×" : ""}</td>` +
+      `<td><span class="bar"><i style="width:${p}%"></i></span><span class="meta">${fl.runs.length}/${NEN}</span></td>` +
+      `<td class="num">${fl.best ? `${fl.best[0].toFixed(1)}% at ${fl.best[1] / 1000} keV` : "–"}</td>`;
+    const sub = document.createElement("tr");
+    sub.className = "runs"; sub.hidden = true;
+    sub.innerHTML = `<td colspan="${NCOL}"></td>`;
+    body.append(tr, sub);
+    const toggle = () => {
+      const open = tr.getAttribute("aria-expanded") !== "true";
+      tr.setAttribute("aria-expanded", String(open)); sub.hidden = !open;
+      if (open && !sub.dataset.built) { buildRuns(fl, sub.firstChild); sub.dataset.built = "1"; }
+    };
+    tr.addEventListener("click", toggle);
+    tr.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } });
+  }
+  const figs = document.getElementById("figs");
+  const all = c.figs.concat(DATA.common);
+  figs.className = "figs";
+  figs.innerHTML = (c.figs.length ? "" : `<p class="empty panel">No tracer results yet for this configuration. Figures appear here as flows finish.</p>`) +
+    all.map(f => `<figure class="panel"><img src="${esc(f.src)}" alt="${esc(f.cap)}"><figcaption>${esc(f.cap)}</figcaption></figure>`).join("");
 }
 
 function buildRuns(fl, cell) {
@@ -163,11 +190,5 @@ function buildDetail(fl, r, cell) {
     `<figure class="full"><img src="${esc(r.png)}" alt="Energy loss vs depth, stopping-depth and exit-energy histograms" loading="lazy"></figure></div>`;
 }
 
-const figs = document.getElementById("figs");
-if (DATA.figs.length) {
-  figs.className = "figs";
-  figs.innerHTML = DATA.figs.map(f => `<figure class="panel"><img src="${esc(f.src)}" alt="${esc(f.cap)}"><figcaption>${esc(f.cap)}</figcaption></figure>`).join("");
-} else {
-  figs.innerHTML = `<p class="empty panel">No tracer results yet. Figures appear here as flows finish.</p>`;
-}
+render(DATA.configs[0].key);
 </script>

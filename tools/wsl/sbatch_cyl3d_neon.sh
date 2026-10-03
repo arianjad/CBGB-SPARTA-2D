@@ -15,11 +15,12 @@
 #   sbatch -n <NP> --mem=<MEM_GB>G -t <TIME> --export=ALL,SCCM=20 tools/wsl/sbatch_cyl3d_neon.sh
 # Numerics per flow (strict cell < mean free path, dt < collision time rule,
 # grid adapted at the start): tools/wsl/cyl3d_flow_params.sh. Options (env):
-#   RUNBASE  data dir under ~/orcd/scratch/cbgb-sparta-3d (default cyl-scan)
-#   SIM_S    simulated seconds (default 0.1)
+#   CONFIG   port geometry: ports (default) or ap5 (see cyl3d_flow_params.sh)
+#   RUNBASE  data dir under ~/orcd/scratch/cbgb-sparta-3d (default cyl-ports / cyl-scan)
+#   SIM_S    simulated seconds (default 0.3 ports, 0.1 ap5)
 #   STEPS    adapt, then run only this many production steps (smoke tests)
 #   NDUMP    windows at the end that write field.grid frames (default 3)
-#   KNMIN    cell <= lambda / KNMIN (default 0.5: cells up to 2 mean free paths)
+#   KNMIN    cell <= lambda / KNMIN (default 0 = fixed lattice for ports, 0.5 for ap5)
 #   DT_SET, FNUM_SET, WINDOW_SET, PPC, NADAPT  overrides
 # Restartable: a requeued or resubmitted job resumes from the newest complete
 # checkpoint (one per window) and trims field.grid back to it. NP must stay
@@ -33,11 +34,11 @@ source tools/wsl/site_env.sh; site_mpi
 : "${SCCM:?pass SCCM=<flow> via --export}"
 source tools/wsl/cyl3d_flow_params.sh
 cyl_flow_params "$SCCM"   # MDOT FILLN FNUM DT REFINE ADAPT_STEPS NADAPT WINDOW TOTAL
-RUNBASE="${RUNBASE:-cyl-scan}"
+RUNBASE="${RUNBASE:-$RUNBASE_DEF}"
 CASEDIR=cases/cyl-3d
 RUNDIR="$HOME/orcd/scratch/cbgb-sparta-3d/$RUNBASE/sccm$SCCM"
 mkdir -p "$RUNDIR"
-cp -n "$CASEDIR"/in.ne_cyl3d_run "$CASEDIR"/in.ne_cyl3d_resume "$CASEDIR"/cell_cyl3d.surf \
+cp -n "$CASEDIR"/in.ne_cyl3d_run "$CASEDIR"/in.ne_cyl3d_resume "$CASEDIR"/$SURF \
       "$CASEDIR"/ne.species "$CASEDIR"/ne.vss "$RUNDIR/"
 cd "$RUNDIR"
 SPA="$HOME/opt/sparta-27Aug2026/bin/spa_mpi"
@@ -45,7 +46,7 @@ SPA="$HOME/opt/sparta-27Aug2026/bin/spa_mpi"
 if [ -n "${STEPS:-}" ]; then   # smoke test: fresh run of STEPS steps, one window
   echo "SMOKE SCCM=$SCCM MDOT=$MDOT FILLN=$FILLN FNUM=$FNUM DT=$DT REFINE=$REFINE ADAPT_STEPS=$ADAPT_STEPS STEPS=$STEPS NP=$SLURM_NTASKS" | tee -a scan.log
   mpirun -np "$SLURM_NTASKS" "$SPA" -in in.ne_cyl3d_run -var MDOT $MDOT -var FILLN $FILLN -var FNUM $FNUM \
-    -var DT $DT -var REFINE $REFINE -var ADAPT_STEPS $ADAPT_STEPS -var NADAPT $NADAPT -var KNMIN ${KNMIN:-0.5} \
+    -var DT $DT -var REFINE $REFINE -var ADAPT_STEPS $ADAPT_STEPS -var NADAPT $NADAPT -var KNMIN $KN -var SURF $SURF -var XOUT $XOUT \
     -var DUMPFREQ $STEPS -var CHECKPOINT_STEPS $STEPS -var NSKIP 0 -var NDUMPWIN 1 &> run.log
   rc=$?; grep -h "^ADAPT\|^STRICT RULE" log.sparta | tee -a scan.log
   grep -q "^STRICT RULE VIOLATED" log.sparta && rc=3
@@ -75,7 +76,7 @@ for b in $(ls restart.base.* 2>/dev/null | sed 's/restart.base.//' | sort -n -r 
 done
 N=$(( (TOTAL - LAST) / WINDOW ))
 if [ "$N" -le 0 ]; then echo "already complete at step $LAST" | tee -a scan.log; exit 0; fi
-echo "SCCM=$SCCM MDOT=$MDOT FILLN=$FILLN FNUM=$FNUM DT=$DT REFINE=$REFINE ($CELL_MM mm) ADAPT_STEPS=$ADAPT_STEPS NADAPT=$NADAPT WINDOW=$WINDOW TOTAL=$TOTAL NP=$SLURM_NTASKS" >> scan.log
+echo "CONFIG=$CONFIG SCCM=$SCCM MDOT=$MDOT FILLN=$FILLN FNUM=$FNUM DT=$DT REFINE=$REFINE ($CELL_MM mm) ADAPT_STEPS=$ADAPT_STEPS NADAPT=$NADAPT WINDOW=$WINDOW TOTAL=$TOTAL NP=$SLURM_NTASKS" >> scan.log
 NDUMPWIN=$(( N < ${NDUMP:-3} ? N : ${NDUMP:-3} )); NSKIP=$(( N - NDUMPWIN ))   # field.grid only in the last windows
 COMMON="-var MDOT $MDOT -var FILLN $FILLN -var FNUM $FNUM -var DT $DT \
         -var DUMPFREQ $WINDOW -var CHECKPOINT_STEPS $WINDOW -var NSKIP $NSKIP -var NDUMPWIN $NDUMPWIN"
@@ -84,7 +85,7 @@ if [ "$LAST" -eq 0 ]; then
   echo "$(date) job $SLURM_JOB_ID: fresh start (adapt, then $N windows)" | tee -a scan.log
   rm -f field.grid
   mpirun -np "$SLURM_NTASKS" "$SPA" -in in.ne_cyl3d_run $COMMON \
-    -var REFINE $REFINE -var ADAPT_STEPS $ADAPT_STEPS -var NADAPT $NADAPT -var KNMIN ${KNMIN:-0.5} &> run.log
+    -var REFINE $REFINE -var ADAPT_STEPS $ADAPT_STEPS -var NADAPT $NADAPT -var KNMIN $KN -var SURF $SURF -var XOUT $XOUT &> run.log
 else
   if [ -f field.grid ]; then   # drop frames dumped after the checkpoint
     cut=$(grep -b -A1 "^ITEM: TIMESTEP" field.grid | awk -F'[-:]' -v s="$LAST" \

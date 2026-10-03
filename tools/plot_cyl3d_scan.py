@@ -13,8 +13,7 @@ pooling seed chunks, and writes:
   OUT_stopdepth.png  mean depth where ions first drop below 1 eV (--ionlog) vs beam
                      energy, one line per flow
 
-Usage: python tools/plot_cyl3d_scan.py [--runbase cyl-scan] [--cond table-central]
-                                       [--out results/figures/cyl3d_scan]
+Usage: python tools/plot_cyl3d_scan.py [--config ports|ap5] [--runbase ...] [--cond table-central] [--out ...]
 """
 import argparse
 import glob
@@ -29,7 +28,7 @@ import numpy as np
 from matplotlib.colors import LinearSegmentedColormap
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from tracer_classify3d import CYL_BOX as BOX, CYL_OUTLET_X as OUTLET_X, classify, load  # noqa: E402
+from tracer_classify3d import CYL_BOX as BOX, CYL_OUTLET_X, CYL_PORTS_OUTLET_X, classify, load  # noqa: E402
 
 BASE = os.path.expanduser("~/orcd/scratch/cbgb-sparta-3d")
 AMU, EV = 1.66054e-27, 1.602177e-19
@@ -50,6 +49,9 @@ def wilson(k, n, z=1.96):
     c = (p + z * z / (2 * n)) / d
     h = z * np.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / d
     return 100 * p, 100 * (c - h), 100 * (c + h)
+
+
+OUTLET_X = CYL_PORTS_OUTLET_X     # set from --config in main()
 
 
 def collect(runbase, cond):
@@ -82,10 +84,15 @@ def grids(rows, col):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--runbase", default="cyl-scan")
+    ap.add_argument("--config", choices=["ports", "ap5"], default="ports")
+    ap.add_argument("--runbase", default=None, help="default cyl-ports (ports) / cyl-scan (ap5)")
     ap.add_argument("--cond", default="table-central")
-    ap.add_argument("--out", default="results/figures/cyl3d_scan")
+    ap.add_argument("--out", default=None, help="default results/figures/cyl3d_ports / cyl3d_scan")
     a = ap.parse_args()
+    global OUTLET_X
+    OUTLET_X = CYL_PORTS_OUTLET_X if a.config == "ports" else CYL_OUTLET_X
+    a.runbase = a.runbase or ("cyl-ports" if a.config == "ports" else "cyl-scan")
+    a.out = a.out or ("results/figures/cyl3d_ports" if a.config == "ports" else "results/figures/cyl3d_scan")
     rows = collect(a.runbase, a.cond)
     if not rows:
         sys.exit("no tracer outputs found")
@@ -114,7 +121,8 @@ def main():
             ax.set_zlabel("extraction (%)", color=INK); ax.set_zlim(0, zmax * 1.05)
             ax.set_title(title, color=INK, fontsize=11)
             ax.view_init(elev=28, azim=-130)
-        fig.suptitle(f"BaF⁺ extraction, plain cylinder (30.5 mm bore, 45.5 mm long, 5 mm apertures), "
+        ports = "old-cell ports" if a.config == "ports" else "5 mm apertures"
+        fig.suptitle(f"BaF⁺ extraction, plain cylinder (30.5 mm bore, 45.5 mm long, {ports}), "
                      f"σ {a.cond}", color=INK, fontsize=12)
         fig.tight_layout(); fig.savefig(a.out + "_surface.png", dpi=150); plt.close(fig)
         print(f"-> {a.out}_surface.png")
