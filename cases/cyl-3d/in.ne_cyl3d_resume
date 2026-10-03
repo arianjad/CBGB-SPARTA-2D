@@ -1,0 +1,47 @@
+# Resume in.ne_cyl3d_run from a restart file (written on an averaging-window edge).
+# Pass RESTARTFILE, MDOT, FILLN, FNUM, DT, DUMPFREQ, CHECKPOINT_STEPS and
+# NSKIP, NDUMPWIN (remaining windows without / with field.grid output) with
+# -var. field.grid is appended to.
+
+seed        8675309
+read_restart ${RESTARTFILE}
+balance_grid rcb cell
+global      mem/limit 1900
+mixture     negas Ne nrho 1.0e22 temp 23.0
+mixture     fillgas Ne nrho ${FILLN} temp 23.0
+global      fnum ${FNUM}
+collide     vss negas ne.vss
+surf_collide walls diffuse 23.0 1.0
+surf_modify cellwalls collide walls
+fix         bal balance 5000 1.1 rcb time
+global      particle/reorder 100
+fix         src emit/surf negas gasinlet normal yes mflow ${MDOT} 23.0
+compute     cb boundary all n
+fix         ab ave/time 10 500 5000 c_cb[1] mode vector
+compute     cg grid all negas nrho u v w
+compute     tg thermal/grid all negas temp
+variable    NREP equal ${DUMPFREQ}/10
+fix         ag ave/grid all 10 ${NREP} ${DUMPFREQ} c_cg[*] c_tg[*]
+stats       5000
+stats_style step cpu np nattempt ncoll f_src[1] f_src[2] f_ab[1] f_ab[2] f_ab[3] f_ab[4] f_ab[5] f_ab[6]
+
+# NSKIP windows without field output (settling), then NDUMPWIN windows that
+# also dump the window-averaged field to field.grid (storage: only the last
+# few frames are kept on disk; the freeze uses the last 20 ms)
+if          "${NSKIP} == 0" then "jump SELF skipdone"
+variable    loop_s loop ${NSKIP}
+label       skip
+run         ${CHECKPOINT_STEPS}
+write_restart restart.%.*
+next        loop_s
+jump        SELF skip
+label       skipdone
+
+dump        gd grid all ${DUMPFREQ} field.grid id xc yc zc xlo ylo zlo xhi yhi zhi f_ag[*]
+dump_modify gd append yes
+variable    loop_i loop ${NDUMPWIN}
+label       loop
+run         ${CHECKPOINT_STEPS}
+write_restart restart.%.*
+next        loop_i
+jump        SELF loop

@@ -1,0 +1,12 @@
+# VSS neon for 5-60 K: species-ID diameter(m) omega tref(K) alpha.
+# Fitted (least squares in ln eta, uniform in ln T over 5-60 K, T_ref = 23 K) to
+# the dilute-gas viscosity from full quantum Chapman-Enskog collision integrals
+# on the ab initio Ne-Ne potential of Hellmann, Bich & Vogel, Mol. Phys. 106,
+# 133 (2008); the calculation reproduces Bich et al. (2008) / CRC eta to 0.1%
+# at 100-300 K. eta(23 K) = 3.61 uPa s. Fit error: <= 6% over 5-60 K.
+# alpha from the computed Schmidt number (Sc = 0.75 at 5-60 K).
+# Bird's 273 K VHS set (d 2.766e-10, omega 0.66) extrapolated to 23 K
+# over-predicts eta by 61% (89% at 10 K): its cross section is ~1.9x too small.
+# Calculation: ~/orcd/scratch/ne_collision_integrals/ (pot.py, qs.py, fit*.py).
+
+Ne  4.59e-10  0.883  23.0  1.43

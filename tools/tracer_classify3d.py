@@ -10,6 +10,10 @@ import numpy as np
 OUTLET_X = 0.08255
 BOX = (0.005, 0.200, -0.020, 0.070, -0.030, 0.080)
 EPS = 1e-5
+# cases/cyl-3d (plain cylinder): outlet aperture outer face (gen_cyl3d.py) and
+# in.ne_cyl3d_run's create_box; pass these to classify() for that case
+CYL_OUTLET_X = 0.04674
+CYL_BOX = (-0.0224, 0.0784, -0.0256, 0.0256, -0.0256, 0.0256)
 
 
 def load(paths):
@@ -26,13 +30,14 @@ def load(paths):
     return np.array(rows).reshape(-1, 12)
 
 
-def classify(r):
-    """Boolean masks (transmitted, lost, wall) for rows from load()."""
+def classify(r, outlet_x=OUTLET_X, box=BOX):
+    """Boolean masks (transmitted, lost, wall) for rows from load().
+    outlet_x and box default to the fluor-cell-3d case; cases/cyl-3d passes its own."""
     xn, yn, zn = r[:, 4], r[:, 5], r[:, 6]
     at_box = np.zeros(len(r), bool)
-    for c, lo, hi in ((xn, BOX[0], BOX[1]), (yn, BOX[2], BOX[3]), (zn, BOX[4], BOX[5])):
+    for c, lo, hi in ((xn, box[0], box[1]), (yn, box[2], box[3]), (zn, box[4], box[5])):
         at_box |= (abs(c - lo) < EPS) | (abs(c - hi) < EPS)
-    return at_box & (xn > OUTLET_X), at_box & (xn <= OUTLET_X), ~at_box
+    return at_box & (xn > outlet_x), at_box & (xn <= outlet_x), ~at_box
 
 
 def main():

@@ -1,0 +1,79 @@
+# Per-flow numerics for the plain-cylinder neon scan (cases/cyl-3d), shared by
+# sbatch_cyl3d_neon.sh, sbatch_cyl3d_post.sh and submit_cyl3d_campaign.sh.
+# Source it, then call
+#   cyl_flow_params <SCCM>
+# It sets MDOT (kg/s), FILLN, FNUM, DT, REFINE, CELL_MM, ADAPT_STEPS, NADAPT,
+# WINDOW (averaging window = checkpoint interval, steps), TOTAL (production
+# steps for SIM_S simulated seconds, default 0.1 s), and a job size
+# NP / MEM_GB / TIME for sbatch, from the expected particle count.
+#
+# Grid rule, checked in every cell: dt < local mean collision time (strict, as in
+# Steinmacher et al., arXiv:2609.11544), and cell < lambda / KNMIN with
+# KNMIN = 0.5, i.e. cells up to 2 local mean free paths (chosen 2026-10-02:
+# the paper's cell < lambda costs ~47k core-h for 5-50 SCCM with the corrected
+# neon cross section, vs ~6k; our 17 SCCM grid test found extraction unchanged
+# between 2.2 and 4.4 lambda). The lattice is therefore chosen per flow:
+# - Expected chamber density: molecular-flow aperture law (their eq. 2) for
+#   two 5 mm thin apertures, n = 4 Q / (c_bar A) = 2.9e20 m^-3 per SCCM
+#   (c_bar = 155 m/s at 23 K). In the transitional regime the apertures
+#   conduct more, so this is an upper bound on the density, and the cells
+#   and time step picked from it are on the safe side.
+# - Mean free path and collision time at that density from the VHS
+#   parameters in cases/cyl-3d/ne.vss (the same formulas as SPARTA's
+#   compute lambda/grid): lambda_est, tau_est.
+# - Starting chamber cell: 1.6 mm / REFINE with REFINE = ceil(1.6 mm x KNMIN / lambda_est),
+#   at least 4 (cells <= 0.40 mm, so a 5 mm aperture spans >= 12 cells).
+#   in.ne_cyl3d_run then refines any cell that still has Kn < KNMIN (e.g.
+#   denser spots) and stops with an error if the rule can't be met.
+# - DT = 0.5 x min(tau_est, cell / c_bar), 2 significant figures, rounded down;
+#   in.ne_cyl3d_run stops if DT >= the smallest per-cell tau it measures.
+# - FNUM: PPC (default 5) particles per starting chamber cell at the expected density.
+# - Adaptation passes: ADAPT_STEPS ~ 2.5 ms each, at most NADAPT = 4.
+# - WINDOW: ~10 ms per averaging window (one field.grid frame), a multiple of
+#   5000 steps (the stats / boundary-flux averaging interval, so a resumed run
+#   starts on a step where those are defined). Only the last NDUMP (default 3)
+#   windows write field.grid frames (storage).
+cyl_flow_params() {
+  local f=$1
+  read MDOT FILLN FNUM DT REFINE CELL_MM ADAPT_STEPS WINDOW NPART_EST NCELL_EST <<<"$(python3 - "$f" "${PPC:-5}" "${KNMIN:-0.5}" "$(dirname "${BASH_SOURCE[0]}")/../../cases/cyl-3d/ne.vss" <<'EOF'
+import math, sys
+f, ppc, knmin, vss = float(sys.argv[1]), float(sys.argv[2]), float(sys.argv[3]), sys.argv[4]
+d, w, tref = [float(x) for x in next(l for l in open(vss) if l.split() and l.split()[0] == "Ne").split()[1:4]]
+kB, m, T = 1.380649e-23, 20.1797 * 1.66053907e-27, 23.0
+n = 2.9e20 * f
+cbar = math.sqrt(8 * kB * T / (math.pi * m))
+lam = 1 / (math.pi * math.sqrt(2) * d**2 * n * (tref / T)**(w - 0.5))       # SPARTA lambda/grid, one species
+mr = m / 2
+tau = 1 / (2 * d**2 * n * math.sqrt(2 * math.pi * kB * tref / mr) * (T / tref)**(1 - w))
+R = max(4, math.ceil(1.6e-3 * knmin / lam))     # cell <= lambda / KNMIN
+h = 1.6e-3 / R
+def sig2(x):
+    e = math.floor(math.log10(x)); return math.floor(x / 10**(e - 1)) * 10**(e - 1)
+dt = sig2(0.5 * min(tau, h / cbar))
+fnum = n * h**3 / ppc
+ncell = 33178e-9 / h**3                       # chamber cells
+npart = n * 33178e-9 / fnum
+k1000 = lambda s: max(1000, int(round(s / dt / 1000)) * 1000)
+k5000 = lambda s: max(5000, int(round(s / dt / 5000)) * 5000)
+print(f"{1.500541e-8*f:.6e} {n:.4e} {fnum:.4e} {dt:.2g} {R} {h*1e3:.4f} {k1000(2.5e-3)} {k5000(0.01)} {npart:.3e} {ncell:.3e}")
+EOF
+)"
+  NADAPT="${NADAPT:-4}"
+  DT="${DT_SET:-$DT}"; FNUM="${FNUM_SET:-$FNUM}"
+  if [ -n "${DT_SET:-}" ]; then
+    WINDOW=$(python3 -c "print(max(5000, int(round(0.01/$DT/5000))*5000))")
+    ADAPT_STEPS=$(python3 -c "print(max(1000, int(round(2.5e-3/$DT/1000))*1000))")
+  fi
+  WINDOW="${WINDOW_SET:-$WINDOW}"
+  TOTAL=$(python3 -c "print(max(1, int(round(${SIM_S:-0.1}/$DT/$WINDOW)))*$WINDOW)")
+  # job size: ~1.5M particles per task (16..48 tasks); walltime from the smoke-test rate
+  # (3.35M particle-steps per core-second on submit95) x 2 margin; memory ~0.7 GB per
+  # 1M particles + 0.5 GB per 1M cells (smoke test), doubled for refined cells
+  read NP MEM_GB TIME <<<"$(python3 -c "
+import math
+npart, ncell, steps = $NPART_EST, $NCELL_EST, $TOTAL + ($NADAPT + 1) * $ADAPT_STEPS
+np_ = min(48, max(16, 16 * math.ceil(npart / 1.5e6 / 16)))
+mem = int(max(32, 2 * (0.7 * npart / 1e6 + 0.5 * (ncell + 1.4e6) / 1e6) + 8))
+hrs = min(144, max(4, math.ceil(2 * npart * steps / 3.35e6 / np_ / 3600)))
+print(np_, mem, f'{hrs//24}-{hrs%24:02d}:00:00')")"
+}

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Animate recorded BaF+ trajectories in the sealed fluor-cell-3d housing.
+"""Animate recorded BaF+ trajectories in the sealed fluor-cell-3d housing
+(or, with --geom cyl, in the plain cylinder of cases/cyl-3d).
 
 Input is a ParticleTracing3D.jl run made with --saveall 1 --trajprint K. Its
 rows with a negative idx are the flight legs of ions 1..K; the positive rows
@@ -22,6 +23,7 @@ Writes:
 
 Usage: python tools/render_fluor3d_trajectories.py TRAJ.out --surf SURF --out OUT
          [--sccm 17] [--energy "500 eV"] [--frames 160] [--tmin 1e-7] [--linear-after T] [--trail 6] [--xmax 0.11]
+         [--geom fluor|cyl]
   --linear-after T: first half of the frames log-spaced from tmin to T, second half linear
                     from T to the end (same frame count, so the GIF keeps its length)
 """
@@ -33,7 +35,7 @@ import numpy as np
 import pyvista as pv
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from tracer_classify3d import classify, load  # noqa: E402
+from tracer_classify3d import CYL_BOX, CYL_OUTLET_X, classify, load  # noqa: E402
 from plot_field_3d_slices import read_surf  # noqa: E402
 from export_vtk import build_wall_mesh  # noqa: E402
 
@@ -41,6 +43,13 @@ FATES = {  # reference palette slots 1-3, same order everywhere
     "extracted": "#2a78d6",
     "wall hit": "#eb6834",
     "back out the inlet": "#1baf7a",
+}
+# per geometry: ion start point (m), classify() args, camera (position, focal point, up), default --xmax
+GEOMS = {
+    "fluor": dict(start=(0.03048, 0.01905, 0.01905), classify=(),
+                  camera=[(0.02, -0.17, 0.12), (0.058, 0.02, 0.016), (0, 0, 1)], xmax=0.11),
+    "cyl": dict(start=(-0.00127, 0.0, 0.0), classify=(CYL_OUTLET_X, CYL_BOX),
+                camera=[(0.0, -0.17, 0.10), (0.025, 0.0, -0.004), (0, 0, 1)], xmax=0.07),
 }
 
 
@@ -75,12 +84,17 @@ def main():
     ap.add_argument("--linear-after", type=float, default=None,
                     help="s; log-spaced frames up to here (first half), linear after (second half)")
     ap.add_argument("--trail", type=int, default=6)
-    ap.add_argument("--xmax", type=float, default=0.11, help="crop view at this x (m); ions beyond are hidden")
+    ap.add_argument("--xmax", type=float, default=None,
+                    help="crop view at this x (m); ions beyond are hidden (default 0.11 fluor, 0.07 cyl)")
+    ap.add_argument("--geom", choices=list(GEOMS), default="fluor")
     a = ap.parse_args()
+    G = GEOMS[a.geom]
+    if a.xmax is None:
+        a.xmax = G["xmax"]
 
     fin = load([a.traj])
     fin = fin[fin[:, 0] <= a.k]
-    tr, lost, wall = classify(fin)
+    tr, lost, wall = classify(fin, *G["classify"])
     fate = np.where(tr, 0, np.where(lost, 2, 1))          # 0 extracted, 1 wall hit, 2 back out inlet
     ids = fin[:, 0].astype(int)
     tend = fin[:, 11]
@@ -101,7 +115,7 @@ def main():
     for n, (i, te) in enumerate(zip(ids, tend)):
         L = legs[legs[:, 0] == i]
         t = np.concatenate([[0.0], L[:, 4], [te]])
-        xyz = np.vstack([[0.03048, 0.01905, 0.01905], L[:, 1:4], fin[n, 4:7]])
+        xyz = np.vstack([G["start"], L[:, 1:4], fin[n, 4:7]])
         o = np.argsort(t, kind="stable"); t, xyz = t[o], xyz[o]
         j = np.clip(np.searchsorted(t, times, side="right") - 1, 0, len(t) - 1)
         pos[n] = xyz[j]
@@ -126,7 +140,7 @@ def main():
         pl.set_background("#fcfcfb")
         pl.add_mesh(walls, color="#b9b8b2", opacity=0.13, smooth_shading=True)
         pl.add_mesh(walls.extract_feature_edges(40), color="#8a8983", line_width=1)
-        pl.camera_position = [(0.02, -0.17, 0.12), (0.058, 0.02, 0.016), (0, 0, 1)]
+        pl.camera_position = G["camera"]
         pl.camera.zoom(1.6)
         return pl
 

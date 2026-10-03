@@ -70,6 +70,9 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--span-steps", type=int, required=True)
     ap.add_argument("--max-frames", type=int, required=True)
+    ap.add_argument("--chamber-cyl", type=float, nargs=3, metavar=("X0", "X1", "R"),
+                    help="chamber summary over the cylinder x in [X0, X1], r < R about the x axis (mm), "
+                         "for cases/cyl-3d; default is the fluor-cell-3d chamber box")
     a = ap.parse_args()
 
     offs, size = frame_offsets(a.field_grid, a.max_frames)
@@ -112,7 +115,11 @@ def main():
     n, u, v, w, T = (avg[:, i] for i in range(5))
     n = np.where(n < NRHO_CEILING, n, 0)
     N = n * vol
-    inh = (xc > 30.48) & (xc < 82.55) & (yc > 0) & (yc < 44.45) & (zc > -6.35) & (zc < 38.1) & (n > 0)
+    if a.chamber_cyl:
+        x0, x1, rc = a.chamber_cyl
+        inh = (xc > x0) & (xc < x1) & (yc**2 + zc**2 < rc**2) & (n > 0)
+    else:
+        inh = (xc > 30.48) & (xc < 82.55) & (yc > 0) & (yc < 44.45) & (zc > -6.35) & (zc < 38.1) & (n > 0)
     avgw = lambda q: (N*q)[inh].sum() / N[inh].sum()
     print(f"=== chamber: <n> {N[inh].sum()/vol[inh].sum():.3e} m^-3, T {avgw(T):.1f} K, "
           f"<u> {avgw(u):+.2f} <v> {avgw(v):+.2f} <w> {avgw(w):+.2f}")

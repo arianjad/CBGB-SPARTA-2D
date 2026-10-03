@@ -1,0 +1,177 @@
+# Neon (23 K) in the plain cylindrical cell, cell_cyl3d.surf (gen_cyl3d.py):
+# chamber x 0..45.47 mm, r < 15.24 mm, axis x at y = z = 0, 5 mm apertures
+# through 1.27 mm end plates (inlet face x = -1.27 mm, outlet face
+# x = 46.74 mm), neon fed through a 42 mm^2 wall patch (type 2) near the
+# inlet end, at -z.
+#
+# DSMC grid rule, checked in every cell: the time step shorter than the local
+# mean collision time (strict, as in Steinmacher et al., arXiv:2609.11544), and
+# the cell Knudsen number Kn = lambda / mean cell side >= KNMIN (default 0.5,
+# i.e. cells up to 2 mean free paths; the paper uses 1).
+#
+# Grid, per flow (tools/wsl/cyl3d_flow_params.sh sets REFINE and DT):
+#  1. 1.6 mm base cells; the chamber and an 8 mm x 8 mm-radius region
+#     outside each aperture start at a uniform 1.6/REFINE mm.
+#  2. Adaptation phase: run ADAPT_STEPS with nrho and T time-averaged, compute
+#     lambda, tau and Kn per cell (compute lambda/grid, Bird eq. 4.77 with the
+#     ne.vss parameters), and split (2x2x2) every cell with Kn < KNMIN, anywhere
+#     in the domain. Repeat until no cell violates the rule, at most NADAPT
+#     refining passes; quit with an error if cells still violate it, or if
+#     DT >= the smallest mean collision time in any cell.
+#  3. The grid is then fixed, the timestep counter reset to 0, and the
+#     production run is checkpointed like in.ne_fluor3d_sealed_run: a restart
+#     file every CHECKPOINT_STEPS (= DUMPFREQ, the averaging window), resume
+#     with in.ne_cyl3d_resume.
+# Pass MDOT (kg/s), FILLN (m^-3), FNUM, DT (s), REFINE, ADAPT_STEPS, NADAPT,
+# DUMPFREQ, CHECKPOINT_STEPS, NSKIP and NDUMPWIN (production windows without /
+# with field.grid output) with -var.
+
+variable    SEED index 8675309
+variable    KNMIN index 0.5      # cell <= lambda / KNMIN (0.5: up to 2 mean free paths)
+variable    FMIN index 0.5      # cells with a smaller gas-volume fraction (wall-cut slivers) are not checked
+seed        ${SEED}
+units       si
+dimension   3
+boundary    o o o
+global      gridcut 0.0
+global      surfmax 500
+create_box  -0.0224 0.0784 -0.0256 0.0256 -0.0256 0.0256
+region      CH   cylinder x 0 0 0.0160 -0.0016 0.0484
+region      PIN  cylinder x 0 0 0.0080 -0.0096 -0.0016
+region      POUT cylinder x 0 0 0.0080 0.0484 0.0564
+region      CAV  union 3 CH PIN POUT
+create_grid 63 32 32 levels 2 region 2 CAV ${REFINE} ${REFINE} ${REFINE} inside any
+balance_grid rcb cell
+global      mem/limit 1900
+species     ne.species Ne
+mixture     negas Ne nrho 1.0e22 temp 23.0
+mixture     fillgas Ne nrho ${FILLN} temp 23.0
+global      fnum ${FNUM}
+collide     vss negas ne.vss
+read_surf   cell_cyl3d.surf type group cellwalls clip
+surf_collide walls diffuse 23.0 1.0
+surf_modify cellwalls collide walls
+group       gasinlet surf type 2
+region      gas cylinder x 0 0 0.01524 0.0 0.04547
+create_particles fillgas n 0 region gas
+balance_grid rcb part
+fix         bal balance 5000 1.1 rcb time
+global      particle/reorder 100
+fix         src emit/surf negas gasinlet normal yes mflow ${MDOT} 23.0
+compute     cg grid all negas nrho u v w
+compute     tg thermal/grid all negas temp
+stats_modify flush yes
+timestep    ${DT}
+
+# ---- adaptation phase ----
+# per pass: nrho, T averaged over ADAPT_STEPS -> lambda, tau, Kn per cell; the
+# worst cell's position, density and temperature, and the number of cells that
+# break each half of the rule, are printed.
+# Cells cut by the wall to a gas-volume fraction < FMIN are skipped: their
+# density and temperature come from a particle or two in a sliver of volume
+# (the 20 SCCM smoke test showed n up to 30x the chamber and T 0-9 K in them,
+# all at r = 15.3 mm), and splitting them only makes new slivers. Their gas
+# is the same as in the neighbouring full cells, which are checked.
+compute     pg property/grid all xc yc zc vol xlo xhi ylo yhi zlo zhi
+variable    gfrac grid c_pg[4]/((c_pg[6]-c_pg[5])*(c_pg[8]-c_pg[7])*(c_pg[10]-c_pg[9]))
+variable    NAR equal ${ADAPT_STEPS}/10
+variable    ai loop ${NADAPT}
+label       adapt
+fix         aa ave/grid all 10 ${NAR} ${ADAPT_STEPS} c_cg[1] c_tg[1]
+compute     la lambda/grid f_aa[1] f_aa[2] knall tau
+variable    gkn grid (v_gfrac>=${FMIN})*c_la[1]+(v_gfrac<${FMIN})*1e20
+variable    gtau grid (v_gfrac>=${FMIN})*c_la[2]+(v_gfrac<${FMIN})*1e20
+fix         ak ave/grid all 1 1 ${ADAPT_STEPS} v_gkn v_gtau
+compute     kw reduce min f_ak[1] c_pg[1] c_pg[2] c_pg[3] f_aa[1] f_aa[2] &
+            replace 2 1 replace 3 1 replace 4 1 replace 5 1 replace 6 1
+compute     tw reduce min f_ak[2] c_pg[1] c_pg[2] c_pg[3] f_aa[1] f_aa[2] &
+            replace 2 1 replace 3 1 replace 4 1 replace 5 1 replace 6 1
+variable    gkbad grid f_ak[1]<${KNMIN}
+variable    gtbad grid f_ak[2]<=${DT}
+compute     nbad reduce sum v_gkbad v_gtbad
+stats       ${ADAPT_STEPS}
+stats_style step cpu np nattempt ncoll f_src[1]
+run         ${ADAPT_STEPS}
+variable    kn equal c_kw[1]
+variable    kw2 equal c_kw[2]
+variable    kw3 equal c_kw[3]
+variable    kw4 equal c_kw[4]
+variable    kw5 equal c_kw[5]
+variable    kw6 equal c_kw[6]
+variable    tw2 equal c_tw[2]
+variable    tw3 equal c_tw[3]
+variable    tw4 equal c_tw[4]
+variable    tw5 equal c_tw[5]
+variable    tw6 equal c_tw[6]
+variable    tm equal c_tw[1]
+variable    nk equal c_nbad[1]
+variable    nt equal c_nbad[2]
+print       "ADAPT pass ${ai}: min Kn_cell ${kn} at (${kw2},${kw3},${kw4}) n ${kw5} T ${kw6}; ${nk} cells Kn<${KNMIN}"
+print       "ADAPT pass ${ai}: min tau ${tm} s at (${tw2},${tw3},${tw4}) n ${tw5} T ${tw6}; ${nt} cells tau<=DT ${DT}"
+if          "${kn} >= ${KNMIN}" then "jump SELF adapted"
+if          "${ai} == ${NADAPT}" then "print 'STRICT RULE VIOLATED: min Kn_cell ${kn} < ${KNMIN} after ${NADAPT} refining passes'" "quit"
+adapt_grid  all refine value f_ak[1] ${KNMIN} 0.0 thresh less more cells 2 2 2
+balance_grid rcb part
+uncompute   nbad
+variable    gkbad delete
+variable    gtbad delete
+uncompute   kw
+uncompute   tw
+unfix       ak
+variable    gkn delete
+variable    gtau delete
+uncompute   la
+unfix       aa
+next        ai
+jump        SELF adapt
+label       adapted
+# the time-step half of the rule is enforced on the converged grid only
+# (earlier passes are still start-up transients)
+if          "${tm} <= ${DT}" then "print 'STRICT RULE VIOLATED: DT ${DT} >= min mean collision time ${tm}'" "quit"
+print       "ADAPTED: rule satisfied, min Kn_cell ${kn}, min tau ${tm} s, DT ${DT}"
+uncompute   nbad
+variable    gkbad delete
+variable    gtbad delete
+uncompute   kw
+uncompute   tw
+unfix       ak
+variable    gkn delete
+variable    gtau delete
+uncompute   la
+unfix       aa
+# gas-volume fraction of every cell, once, for the post-run rule check
+dump        gv grid all 1 cellfrac.grid id v_gfrac
+run         0
+undump      gv
+variable    gfrac delete
+uncompute   pg
+write_restart restart.adapted
+reset_timestep 0
+
+# ---- production: fixed grid, averaging windows ----
+compute     cb boundary all n
+fix         ab ave/time 10 500 5000 c_cb[1] mode vector
+variable    NREP equal ${DUMPFREQ}/10
+fix         ag ave/grid all 10 ${NREP} ${DUMPFREQ} c_cg[*] c_tg[*]
+stats       5000
+stats_style step cpu np nattempt ncoll f_src[1] f_src[2] f_ab[1] f_ab[2] f_ab[3] f_ab[4] f_ab[5] f_ab[6]
+
+# NSKIP windows without field output (settling), then NDUMPWIN windows that
+# also dump the window-averaged field to field.grid (storage: only the last
+# few frames are kept on disk; the freeze uses the last 20 ms)
+if          "${NSKIP} == 0" then "jump SELF skipdone"
+variable    loop_s loop ${NSKIP}
+label       skip
+run         ${CHECKPOINT_STEPS}
+write_restart restart.%.*
+next        loop_s
+jump        SELF skip
+label       skipdone
+
+dump        gd grid all ${DUMPFREQ} field.grid id xc yc zc xlo ylo zlo xhi yhi zhi f_ag[*]
+variable    loop_i loop ${NDUMPWIN}
+label       loop
+run         ${CHECKPOINT_STEPS}
+write_restart restart.%.*
+next        loop_i
+jump        SELF loop

@@ -46,6 +46,7 @@ using Statistics
 import Base: convert
 
 include("sigma_table.jl")
+include("ion_diagnostics.jl")
 
 # ---- Statistics machinery: identical to ParticleTracing.jl ----
 
@@ -232,6 +233,14 @@ function parse_commandline()
             default = nothing
         "--exitstats"
             help = "filename to save average properties of trajectories where the particle hits the simulation boundary"
+            arg_type = String
+            default = nothing
+        "--hist"
+            help = "file prefix: write PREFIX_xr.csv ((x, r) histograms of energy deposited at collisions, ion dwell time and collision count; dE/dx = sum over r / (nions dx)) and PREFIX_xe.csv ((x, log10 E) collision counts); see ion_diagnostics.jl"
+            arg_type = String
+            default = nothing
+        "--ionlog"
+            help = "file: one CSV row per ion with x/t/collisions at first KE < 1 eV and < 0.1 eV, max x, max r, path length and final KE"
             arg_type = String
             default = nothing
         "--spawnout"
@@ -804,7 +813,8 @@ for a spin flip to be relative to either. Free flight is a straight line;
 propagation uses freePropagate! (plain x += v*t), not the trap-aware
 version.
 """
-@inline function propagate(xinit, vin, interp!, getCollision, table, stats=nothing, idx=0)
+@inline function propagate(xinit, vin, interp!, getCollision, table, stats=nothing, idx=0;
+                           diag=nothing, hspec=nothing, ms=nothing)
     x = deepcopy(xinit)
     props = zeros(8)
     interp!(props, x)
@@ -812,6 +822,9 @@ version.
     v = deepcopy(vin)
     time = 0.0
     collides = 0
+    # --ionlog milestones (see ion_diagnostics.jl)
+    x1, t1, n1, x01, t01, n01 = NaN, NaN, NaN, NaN, NaN, NaN
+    xmax, rmax, pathlen = x[1], sqrt(x[2]^2 + x[3]^2), 0.0
 
     if LinearAlgebra.norm(v) < 1E-6
         collide!(v, view(props, 3:5), props[6], table)
@@ -843,10 +856,18 @@ version.
             xnext[1] = x[1] + t_clip * (xnext[1] - x[1])
             xnext[2] = x[2] + t_clip * (xnext[2] - x[2])
             xnext[3] = x[3] + t_clip * (xnext[3] - x[3])
+            if !isnothing(ms)
+                seg = sqrt((xnext[1]-x[1])^2 + (xnext[2]-x[2])^2 + (xnext[3]-x[3])^2)
+                isnothing(diag) || diag_flight!(diag, hspec, x, xnext, seg / max(vmag, 1e-30))
+                ms .= (idx, x1, t1, n1, x01, t01, n01, max(xmax, xnext[1]),
+                       max(rmax, sqrt(xnext[2]^2 + xnext[3]^2)), pathlen + seg, ke_ev(v, MASS_PARTICLE))
+            end
             return (x[1], x[2], x[3], xnext[1], xnext[2], xnext[3], v[1], v[2], v[3], collides, time)
         else
+            isnothing(diag) || diag_flight!(diag, hspec, x, xnext, dist / max(vmag, 1e-30))
             time += dist / max(vmag, 1e-30)
             collides += 1
+            pathlen += dist
             if TRAJPRINT != 0 && idx <= TRAJPRINT
                 print(@sprintf("%d %e %e %e %e %e %e %e %e %e %d %e\n", -idx,
                 x[1], x[2], x[3], xnext[1], xnext[2], xnext[3], v[1], v[2], v[3], collides, time))
@@ -856,7 +877,19 @@ version.
             updateStats!(stats, x, v, time, collides, dist)
         end
         x .= xnext
+        xmax = max(xmax, x[1]); rmax = max(rmax, sqrt(x[2]^2 + x[3]^2))
+        E1 = isnothing(ms) ? 0.0 : ke_ev(v, MASS_PARTICLE)
         collide!(v, view(props, 3:5), props[6], table)
+        if !isnothing(ms)
+            E2 = ke_ev(v, MASS_PARTICLE)
+            isnothing(diag) || diag_collision!(diag, hspec, x, E1, E2)
+            if isnan(x1) && E2 < 1.0
+                x1, t1, n1 = x[1], time, collides
+            end
+            if isnan(x01) && E2 < 0.1
+                x01, t01, n01 = x[1], time, collides
+            end
+        end
     end
 end
 
@@ -872,7 +905,9 @@ function SimulateParticles(
     rbins=100,
     zbins=100;
     savespawns=nothing,
-    make_stats=nothing
+    make_stats=nothing,
+    savehist=nothing,
+    saveionlog=nothing
     )
 
     (; interpolate!, getCollision, table, max_x_geom) = build_field(geomFile, gridFile)
@@ -888,6 +923,16 @@ function SimulateParticles(
     minz = minimum(griddf_bounds.xlo); maxz = maximum(griddf_bounds.xhi)
     maxr = maximum(sqrt.((griddf_bounds.yc .- mean(griddf_bounds.yc)).^2 .+
                           (griddf_bounds.zc .- mean(griddf_bounds.zc)).^2)) * 1.5 + 1e-6
+
+    # --hist / --ionlog (ion_diagnostics.jl): 0.25 mm x bins over the field's
+    # x extent, 0.5 mm r bins out to the farthest box corner, 0.05-decade
+    # energy bins from 1e-4 eV to ~3e4 eV
+    diagon = !isnothing(savehist) || !isnothing(saveionlog)
+    rcorner = sqrt(max(abs(minimum(griddf_bounds.ylo)), abs(maximum(griddf_bounds.yhi)))^2 +
+                   max(abs(minimum(griddf_bounds.zlo)), abs(maximum(griddf_bounds.zhi)))^2)
+    hspec = HistSpec(minz, 2.5e-4, ceil(Int, (maxz - minz) / 2.5e-4), 5e-4, ceil(Int, rcorner / 5e-4) + 1,
+                     -4.0, 0.05, 170)
+    ms_all = diagon ? fill(NaN, nParticles, length(MS_COLS)) : nothing
 
     new_stats = isnothing(make_stats) ?
         (() -> StatsArray(0.0, maxr, rbins, minz, maxz, zbins)) : make_stats
@@ -905,6 +950,7 @@ function SimulateParticles(
     chunks = collect(Iterators.partition(1:nParticles, cld(nParticles, Threads.nthreads())))
     part_all = isnothing(savestats) ? nothing : [new_stats() for _ in chunks]
     part_bound = isnothing(saveexitstats) ? nothing : [new_stats() for _ in chunks]
+    part_diag = isnothing(savehist) ? nothing : [IonDiag(hspec) for _ in chunks]
 
     spawn_rejects = Threads.Atomic{Int}(0)
     spawns = isnothing(savespawns) ? nothing : zeros(nParticles, 3)
@@ -925,7 +971,9 @@ function SimulateParticles(
                 tries > 0 && Threads.atomic_add!(spawn_rejects, tries)
             end
             isnothing(spawns) || (spawns[i,:] .= xpart)
-            outputs[i,:] .= propagate(xpart, vpart, interpolate!, getCollision, table, stats, i)
+            outputs[i,:] .= propagate(xpart, vpart, interpolate!, getCollision, table, stats, i;
+                diag = isnothing(part_diag) ? nothing : part_diag[c], hspec = hspec,
+                ms = diagon ? view(ms_all, i, :) : nothing)
             colltype, _ = getCollision(outputs[i,[1,2,3]], outputs[i,[4,5,6]])
             if !isnothing(savestats)
                 merge!(part_all[c], stats)
@@ -944,6 +992,13 @@ function SimulateParticles(
         isnothing(part_all) || merge!(allstats, part_all[c])
         isnothing(part_bound) || merge!(boundstats, part_bound[c])
     end
+    if !isnothing(savehist)
+        for c in 2:length(chunks)
+            merge_diag!(part_diag[1], part_diag[c])
+        end
+        write_diag(savehist, part_diag[1], hspec, nParticles)
+    end
+    isnothing(saveionlog) || write_ionlog(saveionlog, ms_all)
     if !isnothing(savespawns)
         CSV.write(savespawns, DataFrame(idx = 1:nParticles, x = spawns[:,1],
                                         y = spawns[:,2], z = spawns[:,3]))
@@ -998,7 +1053,7 @@ function main(args)
         args["saveall"],
         !isnothing(args["stats"]),
         !isnothing(args["exitstats"]);
-        savespawns = args["spawnout"])
+        savespawns = args["spawnout"], savehist = args["hist"], saveionlog = args["ionlog"])
     runtime = time() - start
     if !isnothing(args["stats"])
         CSV.write(args["stats"], convert(DataFrame, allstats))
