@@ -222,6 +222,17 @@ def main():
                     fo.write(fi.read())
                 os.utime(dst, (os.stat(FIG + suf).st_atime, os.stat(FIG + suf).st_mtime))
             figs.append(dict(src=f"fig/cyl3d_scan{suf}", cap=cap))
+    xs = "results/figures/cross_sections.png"     # tools/plot_cross_sections.py
+    if os.path.exists(xs):
+        dst = f"{SITE}/fig/cross_sections.png"
+        if not os.path.exists(dst) or fhash(dst) != fhash(xs):
+            with open(xs, "rb") as fi, open(dst, "wb") as fo:
+                fo.write(fi.read())
+            os.utime(dst, (os.stat(xs).st_atime, os.stat(xs).st_mtime))
+        figs.append(dict(src="fig/cross_sections.png",
+                         cap="Cross sections. Left: BaF⁺–Ne vs beam energy: old 1/v model with its floor vs the computed "
+                             "table now used. Right: Ne–Ne through the viscosity it implies: Bird's room-temperature "
+                             "parameters (old runs) vs ab initio values and the new fit (cylinder runs)."))
     ceph = sh("getfattr -n ceph.dir.rbytes --only-values /ceph/submit/data/user/h/$USER 2>/dev/null").strip()
     meta = dict(updated=datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
                 running=sum(v == "RUNNING" for v in jobs.values()), queued=sum(v == "PENDING" for v in jobs.values()),
