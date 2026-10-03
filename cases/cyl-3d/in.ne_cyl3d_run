@@ -176,20 +176,23 @@ stats_style step cpu np nattempt ncoll f_src[1] f_src[2] f_ab[1] f_ab[2] f_ab[3]
 
 # Run to steady state, then average. After every window (DUMPFREQ steps =
 # CHECKPOINT_STEPS) the particle count is compared with its value two windows
-# earlier; the flow is steady once |dN|/N < TOL (default 0.002 per 20 ms; with
-# gas residence times ~0.1 s that leaves the field within ~1-2% of its final
-# state), after at least MINWIN windows. MAXWIN caps the windows left in this
+# earlier; the flow is steady once |dN|/N < TOL (default 0.005 per 20 ms, set
+# 2026-10-03; with gas residence times ~0.1 s that leaves the field within a few
+# % of its final state), after at least MINWIN windows. MAXWIN caps the windows left in this
 # job (the run stops with a NOT STEADY warning). Then NDUMPWIN windows also
 # dump the window-averaged field to field.grid and the run ends.
 # STEADYDONE = 1 (a resumed job that already reached steady state) goes straight
 # to the dump windows. The STEADY / NOT STEADY / PRODUCTION DONE lines also go to
 # steady.txt, which sbatch_cyl3d_neon.sh reads on a resume.
-variable    TOL index 0.002
+variable    TOL index 0.005
 variable    MINWIN index 5
 variable    STEADYDONE index 0
-variable    iw equal 0
-variable    p1 equal 0
-variable    p2 equal 0
+variable    IW0 index 0                 # a resumed job continues the window count and
+variable    P1 index 0                  # history (last two window particle counts,
+variable    P2 index 0                  # read from run.log by sbatch_cyl3d_neon.sh)
+variable    iw equal ${IW0}
+variable    p1 equal ${P1}
+variable    p2 equal ${P2}
 variable    p3 equal 0
 variable    nnow equal np
 variable    stp equal step

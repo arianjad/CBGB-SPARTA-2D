@@ -86,14 +86,17 @@ if [ "$LAST" -gt 0 ]; then
     STEADYDONE=1; NDUMPWIN=$(( NDUMP - (LAST - S) / WINDOW ))
     [ "$NDUMPWIN" -le 0 ] && { echo "averaging windows already done at step $LAST" | tee -a scan.log; echo "PRODUCTION DONE" >> steady.txt; exit 0; }
   else
-    MAXWIN=$(( MAXWIN - LAST / WINDOW )); [ "$MAXWIN" -lt 1 ] && MAXWIN=1
-    MINWIN=$(( 5 - LAST / WINDOW )); [ "$MINWIN" -lt 3 ] && MINWIN=3
+    # continue the settling history: window count and the last two particle counts
+    IW0=$(( LAST / WINDOW ))
+    read P1 P2 <<<"$(grep -E '^WINDOW [0-9]+:' run.log | awk -v n="$IW0" '{w=$2+0} w==n {p1=$4} w==n-1 {p2=$4} END {gsub(",","",p1); gsub(",","",p2); print (p1==""?0:p1), (p2==""?0:p2)}')"
   fi
 fi
+IW0="${IW0:-0}"; P1="${P1:-0}"; P2="${P2:-0}"
 echo "CONFIG=$CONFIG SCCM=$SCCM MDOT=$MDOT FILLN=$FILLN FNUM=$FNUM DT=$DT REFINE=$REFINE ($CELL_MM mm) ADAPT_STEPS=$ADAPT_STEPS NADAPT=$NADAPT WINDOW=$WINDOW MAXSTEPS=$TOTAL NP=$SLURM_NTASKS" >> scan.log
 COMMON="-var MDOT $MDOT -var FILLN $FILLN -var FNUM $FNUM -var DT $DT \
         -var DUMPFREQ $WINDOW -var CHECKPOINT_STEPS $WINDOW -var MAXWIN $MAXWIN -var MINWIN $MINWIN \
-        -var NDUMPWIN $NDUMPWIN -var STEADYDONE $STEADYDONE"
+        -var NDUMPWIN $NDUMPWIN -var STEADYDONE $STEADYDONE -var TOL ${TOL:-0.005} \
+        -var IW0 $IW0 -var P1 $P1 -var P2 $P2"
 if [ "$LAST" -eq 0 ]; then
   # (a run killed during the short adaptation phase just starts over)
   echo "$(date) job $SLURM_JOB_ID: fresh start (adapt, then up to $MAXWIN windows to steady state + $NDUMPWIN averaging)" | tee -a scan.log
@@ -106,7 +109,7 @@ else
           'prev != "" && $2+0 > s {print prev; exit} /ITEM: TIMESTEP/ {prev=$1; next} {prev=""}')
     [ -n "$cut" ] && truncate -s "$cut" field.grid
   fi
-  echo "$(date) job $SLURM_JOB_ID: resume from step $LAST (steady reached: $STEADYDONE; max $MAXWIN settle windows, $NDUMPWIN averaging)" | tee -a scan.log
+  echo "$(date) job $SLURM_JOB_ID: resume from step $LAST (steady reached: $STEADYDONE; window $IW0, last np $P1 $P2; $NDUMPWIN averaging)" | tee -a scan.log
   mpirun -np "$SLURM_NTASKS" "$SPA" -in in.ne_cyl3d_resume -var RESTARTFILE "restart.%.$LAST" $COMMON &>> run.log
 fi
 rc=$?
