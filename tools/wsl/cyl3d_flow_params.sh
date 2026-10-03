@@ -28,7 +28,7 @@
 # - DT = 0.5 x min(tau_est, cell / c_bar), 2 significant figures, rounded down;
 #   in.ne_cyl3d_run stops if DT >= the smallest per-cell tau it measures.
 # - FNUM: PPC (default 5) particles per starting chamber cell at the expected density.
-# - Adaptation passes: ADAPT_STEPS ~ 2.5 ms each, at most NADAPT = 4.
+# - Adaptation passes: ADAPT_STEPS ~ 2.5 ms each, at most NADAPT = 6.
 # - WINDOW: ~10 ms per averaging window (one field.grid frame), a multiple of
 #   5000 steps (the stats / boundary-flux averaging interval, so a resumed run
 #   starts on a step where those are defined). Only the last NDUMP (default 3)
@@ -58,7 +58,7 @@ k5000 = lambda s: max(5000, int(round(s / dt / 5000)) * 5000)
 print(f"{1.500541e-8*f:.6e} {n:.4e} {fnum:.4e} {dt:.2g} {R} {h*1e3:.4f} {k1000(2.5e-3)} {k5000(0.01)} {npart:.3e} {ncell:.3e}")
 EOF
 )"
-  NADAPT="${NADAPT:-4}"
+  NADAPT="${NADAPT:-6}"
   DT="${DT_SET:-$DT}"; FNUM="${FNUM_SET:-$FNUM}"
   if [ -n "${DT_SET:-}" ]; then
     WINDOW=$(python3 -c "print(max(5000, int(round(0.01/$DT/5000))*5000))")

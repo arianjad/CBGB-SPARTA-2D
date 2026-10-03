@@ -8,6 +8,10 @@ pooling seed chunks, and writes:
   OUT_surface.png    3D surfaces: extraction % (z) over flow x energy, all extracted
                      ions and the thermalized ones
   OUT_heatmap.png    the same two grids as annotated heatmaps (exact values)
+  OUT_dedx.png       dE/dx per ion vs depth (the Bragg curve, from the tracer's
+                     --hist energy deposition) at 1-5 keV, at the median finished flow
+  OUT_stopdepth.png  mean depth where ions first drop below 1 eV (--ionlog) vs beam
+                     energy, one line per flow
 
 Usage: python tools/plot_cyl3d_scan.py [--runbase cyl-scan] [--cond table-central]
                                        [--out results/figures/cyl3d_scan]
@@ -33,6 +37,9 @@ THERMAL_EV = 0.1
 # reference sequential ramp (blue 100 -> 700), magnitude = extraction %
 SEQ = LinearSegmentedColormap.from_list("seq_blue", ["#cde2fb", "#86b6ef", "#3987e5", "#256abf", "#104281", "#0d366b"])
 INK, MUTED = "#1f1f1e", "#6b6a66"
+CAT = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4"]   # reference categorical slots 1-5
+SEQ_STEPS = ["#86b6ef", "#6da7ec", "#5598e7", "#3987e5", "#2a78d6", "#256abf", "#1c5cab", "#184f95",
+             "#104281", "#0d366b"]   # blue 250..700: ordinal by flow
 
 
 def wilson(k, n, z=1.96):
@@ -127,6 +134,68 @@ def main():
         fig.colorbar(im, ax=ax, label="extraction (%)")
     fig.tight_layout(); fig.savefig(a.out + "_heatmap.png", dpi=150); plt.close(fig)
     print(f"-> {a.out}_heatmap.png")
+    plot_diagnostics(a, sorted({r[0] for r in rows}))
+
+
+def _tagfiles(runbase, f, cond, E, suffix):
+    return sorted(glob.glob(f"{BASE}/{runbase}/sccm{f}/post/tracer_{cond}-e{E}_s*{suffix}"))
+
+
+def plot_diagnostics(a, flows):
+    """dE/dx (Bragg) curves and stopping depths from the --hist / --ionlog outputs."""
+    import pandas as pd
+    # dE/dx at the median finished flow, 1-5 keV
+    have = [f for f in flows if _tagfiles(a.runbase, f, a.cond, 1000, "_xr.csv")]
+    if have:
+        f = have[len(have) // 2]
+        fig, ax = plt.subplots(figsize=(7.5, 4.2))
+        for k, E in enumerate([1000, 2000, 3000, 4000, 5000]):
+            paths = _tagfiles(a.runbase, f, a.cond, E, "_xr.csv")
+            if not paths:
+                continue
+            nions = 0; tot = None
+            for pth in paths:
+                n = int(re.search(r"over all (\d+) ions", open(pth).readline()).group(1)); nions += n
+                d = pd.read_csv(pth, comment="#").groupby("x_m").edep_eV.sum()
+                tot = d if tot is None else tot.add(d, fill_value=0)
+            # rebin the 0.25 mm histogram to 1 mm: eV per mm per ion
+            x0 = np.asarray(tot.index) * 1e3
+            b = np.floor(x0).astype(int)
+            xs = np.unique(b)
+            y = np.array([tot.values[b == v].sum() for v in xs]) / nions / 1.0
+            x = xs + 0.5
+            ax.plot(x, y, color=CAT[k], lw=2)
+            m = x < 45.47
+            ax.annotate(f"{E/1000:g} keV", (x[m][-1], y[m][-1]), xytext=(6, 0), textcoords="offset points",
+                        color=INK, fontsize=9, va="center")
+        ax.axvspan(-1.27, 0, color="#b9b8b2", alpha=0.35, lw=0); ax.axvline(45.47, color=MUTED, lw=1, ls=":")
+        ax.set_xlim(-2, 52); ax.set_xlabel("depth x from the inlet wall (mm)", color=INK)
+        ax.set_ylabel("dE/dx per ion (eV/mm, 1 mm bins)", color=INK)
+        ax.set_title(f"BaF⁺ energy loss vs depth, {f} SCCM Ne (shaded: inlet aperture; dotted: outlet wall)",
+                     color=INK, fontsize=10)
+        ax.grid(alpha=0.25)
+        fig.tight_layout(); fig.savefig(a.out + "_dedx.png", dpi=150); plt.close(fig)
+        print(f"-> {a.out}_dedx.png")
+    # mean depth at first KE < 1 eV vs energy, per flow
+    fig, ax = plt.subplots(figsize=(7.5, 4.2)); any_ = False
+    for j, f in enumerate(flows):
+        Es, xs = [], []
+        for pth in sorted(glob.glob(f"{BASE}/{a.runbase}/sccm{f}/post/tracer_{a.cond}-e*_s*_ions.csv")):
+            E = int(re.search(r"-e(\d+)_s", pth).group(1))
+            x1 = pd.read_csv(pth, comment="#").x_1eV.dropna()
+            if len(x1):
+                Es.append(E); xs.append(x1.mean() * 1e3)
+        if Es:
+            o = np.argsort(Es); any_ = True
+            ax.plot(np.array(Es)[o] / 1000, np.array(xs)[o], color=SEQ_STEPS[min(j, 9)], lw=2, marker="o", ms=3,
+                    label=f"{f} SCCM")
+    if any_:
+        ax.set_xlabel("BaF⁺ beam energy (keV)", color=INK); ax.set_ylabel("mean depth where KE < 1 eV (mm)", color=INK)
+        ax.set_title("Stopping depth", color=INK, fontsize=10); ax.grid(alpha=0.25)
+        ax.legend(fontsize=8, ncol=2, frameon=False)
+        fig.tight_layout(); fig.savefig(a.out + "_stopdepth.png", dpi=150)
+        print(f"-> {a.out}_stopdepth.png")
+    plt.close(fig)
 
 
 if __name__ == "__main__":

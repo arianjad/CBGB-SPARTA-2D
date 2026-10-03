@@ -15,7 +15,8 @@
 #  2. Adaptation phase: run ADAPT_STEPS with nrho and T time-averaged, compute
 #     lambda, tau and Kn per cell (compute lambda/grid, Bird eq. 4.77 with the
 #     ne.vss parameters), and split (2x2x2) every cell with Kn < KNMIN, anywhere
-#     in the domain. Repeat until no cell violates the rule, at most NADAPT
+#     in the domain (cells below 1.2 KNMIN are split, for margin against
+#     sampling noise). Repeat until no cell violates the rule, at most NADAPT
 #     refining passes; quit with an error if cells still violate it, or if
 #     DT >= the smallest mean collision time in any cell.
 #  3. The grid is then fixed, the timestep counter reset to 0, and the
@@ -28,6 +29,8 @@
 
 variable    SEED index 8675309
 variable    KNMIN index 0.5      # cell <= lambda / KNMIN (0.5: up to 2 mean free paths)
+variable    KREF equal 1.2*${KNMIN}   # refine below this (margin for sampling noise and density still settling)
+variable    TFLOOR index 3.0    # K; floor on the sampled T used for lambda/tau (see below)
 variable    FMIN index 0.5      # cells with a smaller gas-volume fraction (wall-cut slivers) are not checked
 seed        ${SEED}
 units       si
@@ -72,13 +75,19 @@ timestep    ${DT}
 # (the 20 SCCM smoke test showed n up to 30x the chamber and T 0-9 K in them,
 # all at r = 15.3 mm), and splitting them only makes new slivers. Their gas
 # is the same as in the neighbouring full cells, which are checked.
+# The sampled temperature is floored at TFLOOR (3 K) for lambda and tau: a
+# nearly empty cell (one particle, n ~ 1e19) samples T ~ 1e-17 K, which sends
+# the VHS lambda ~ (T/Tref)^(omega-1/2) to zero (seen in the 20 SCCM smoke
+# test). Real gas here stays well above 3 K; dense cells are unaffected.
 compute     pg property/grid all xc yc zc vol xlo xhi ylo yhi zlo zhi
 variable    gfrac grid c_pg[4]/((c_pg[6]-c_pg[5])*(c_pg[8]-c_pg[7])*(c_pg[10]-c_pg[9]))
 variable    NAR equal ${ADAPT_STEPS}/10
 variable    ai loop ${NADAPT}
 label       adapt
 fix         aa ave/grid all 10 ${NAR} ${ADAPT_STEPS} c_cg[1] c_tg[1]
-compute     la lambda/grid f_aa[1] f_aa[2] knall tau
+variable    gtf grid f_aa[2]+(f_aa[2]<${TFLOOR})*(${TFLOOR}-f_aa[2])
+fix         tf ave/grid all 1 1 ${ADAPT_STEPS} v_gtf
+compute     la lambda/grid f_aa[1] f_tf knall tau
 variable    gkn grid (v_gfrac>=${FMIN})*c_la[1]+(v_gfrac<${FMIN})*1e20
 variable    gtau grid (v_gfrac>=${FMIN})*c_la[2]+(v_gfrac<${FMIN})*1e20
 fix         ak ave/grid all 1 1 ${ADAPT_STEPS} v_gkn v_gtau
@@ -110,7 +119,7 @@ print       "ADAPT pass ${ai}: min Kn_cell ${kn} at (${kw2},${kw3},${kw4}) n ${k
 print       "ADAPT pass ${ai}: min tau ${tm} s at (${tw2},${tw3},${tw4}) n ${tw5} T ${tw6}; ${nt} cells tau<=DT ${DT}"
 if          "${kn} >= ${KNMIN}" then "jump SELF adapted"
 if          "${ai} == ${NADAPT}" then "print 'STRICT RULE VIOLATED: min Kn_cell ${kn} < ${KNMIN} after ${NADAPT} refining passes'" "quit"
-adapt_grid  all refine value f_ak[1] ${KNMIN} 0.0 thresh less more cells 2 2 2
+adapt_grid  all refine value f_ak[1] ${KREF} 0.0 thresh less more cells 2 2 2
 balance_grid rcb part
 uncompute   nbad
 variable    gkbad delete
@@ -121,6 +130,8 @@ unfix       ak
 variable    gkn delete
 variable    gtau delete
 uncompute   la
+unfix       tf
+variable    gtf delete
 unfix       aa
 next        ai
 jump        SELF adapt
@@ -138,6 +149,8 @@ unfix       ak
 variable    gkn delete
 variable    gtau delete
 uncompute   la
+unfix       tf
+variable    gtf delete
 unfix       aa
 # gas-volume fraction of every cell, once, for the post-run rule check
 dump        gv grid all 1 cellfrac.grid id v_gfrac
@@ -145,7 +158,6 @@ run         0
 undump      gv
 variable    gfrac delete
 uncompute   pg
-write_restart restart.adapted
 reset_timestep 0
 
 # ---- production: fixed grid, averaging windows ----

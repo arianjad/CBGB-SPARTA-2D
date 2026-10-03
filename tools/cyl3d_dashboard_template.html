@@ -1,0 +1,173 @@
+<title>Cylinder Cell Scan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@600&family=IBM+Plex+Sans:wght@400;600&display=swap">
+<style>
+/* layout: one column; summary line, runs table (flow rows expand into energy rows, an energy row opens its run detail), scan figures */
+:root { --bg:#f6f7f5; --panel:#ffffff; --ink:#1d2321; --muted:#5f6864; --line:#dde2df; --hover:#f0f4f8;
+  --accent:#2a78d6; --good:#1a7f4b; --warn:#a86a00; --bad:#c23b3b; --chip:#eef1ef; --sub:#fafbfa;
+  --display:"IBM Plex Sans Condensed","Arial Narrow",sans-serif; --body:"IBM Plex Sans",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,monospace; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg:#121615; --panel:#1a1f1d; --ink:#e7ecea;
+  --muted:#9aa49f; --line:#2b3330; --hover:#22292d; --accent:#5598e7; --good:#4cc38a; --warn:#e0a63a; --bad:#ef7676;
+  --chip:#232a27; --sub:#161b19; color-scheme:dark } }
+:root[data-theme="dark"] { --bg:#121615; --panel:#1a1f1d; --ink:#e7ecea; --muted:#9aa49f; --line:#2b3330; --hover:#22292d;
+  --accent:#5598e7; --good:#4cc38a; --warn:#e0a63a; --bad:#ef7676; --chip:#232a27; --sub:#161b19; color-scheme:dark }
+body { background:var(--bg); color:var(--ink); font:15px/1.5 var(--body) }
+.wrap { max-width:1150px; margin:0 auto; padding-inline:16px; padding-block:20px 48px; display:grid; gap:24px }
+h1 { font:600 26px/1.15 var(--display); margin:0; text-wrap:balance; letter-spacing:.01em }
+h2 { font:600 15px/1.2 var(--display); margin:0 0 10px; text-transform:uppercase; letter-spacing:.07em; color:var(--muted) }
+.sub { color:var(--muted); margin:4px 0 0; max-width:75ch }
+.meta { font:12px var(--mono); color:var(--muted) }
+.panel { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:16px; min-width:0 }
+.tablewrap { overflow-x:auto }
+table { border-collapse:collapse; width:100%; font-variant-numeric:tabular-nums; font-size:14px }
+th, td { text-align:left; padding:6px 10px; border-bottom:1px solid var(--line); white-space:nowrap }
+th { font:600 12px var(--body); text-transform:uppercase; letter-spacing:.05em; color:var(--muted); cursor:help }
+th .q { display:inline-grid; place-items:center; width:14px; height:14px; margin-left:4px; border-radius:50%;
+  border:1px solid var(--muted); font:600 9px var(--body); vertical-align:1px }
+td.num { font-family:var(--mono); font-size:13px }
+tr.flow, tr.run { cursor:pointer } tr.flow:hover, tr.run:hover { background:var(--hover) }
+tr.flow:focus-visible, tr.run:focus-visible { outline:2px solid var(--accent); outline-offset:-2px }
+.chev { display:inline-block; width:12px; color:var(--muted); transition:transform .15s }
+tr[aria-expanded="true"] .chev { transform:rotate(90deg) }
+tr.runs > td { background:var(--sub); padding:8px 8px 12px 28px }
+tr.runs table { font-size:13px } tr.runs th { font-size:11px }
+tr.detail > td { background:var(--panel); padding:12px; white-space:normal }
+.det { display:grid; gap:12px; grid-template-columns:minmax(0, 560px) minmax(0, 1fr); align-items:start }
+.det img { width:100%; border-radius:6px; background:#fff; border:1px solid var(--line) }
+.kv { display:grid; grid-template-columns:auto 1fr; gap:4px 14px; font-size:13px; align-content:start }
+.kv dt { color:var(--muted) } .kv dd { margin:0; font-family:var(--mono) }
+.full { grid-column:1 / -1 }
+.chip { display:inline-block; padding:1px 8px; border-radius:999px; background:var(--chip); font-size:12px }
+.chip.done, .chip.pass { color:var(--good) } .chip.running { color:var(--accent) }
+.chip.failed, .chip.fail { color:var(--bad) } .chip.pending { color:var(--warn) }
+.bar { display:inline-block; vertical-align:middle; height:6px; background:var(--chip); border-radius:3px; width:90px; overflow:hidden; margin-right:6px }
+.bar > i { display:block; height:100%; background:var(--accent) }
+.figs { display:grid; gap:16px; grid-template-columns:repeat(auto-fit, minmax(min(100%, 480px), 1fr)) }
+figure { margin:0; display:grid; gap:6px } figure img { width:100%; border-radius:6px; background:#fff }
+figcaption { font-size:13px; color:var(--muted) }
+.empty { color:var(--muted); font-style:italic }
+@media (max-width:760px) { .det { grid-template-columns:1fr } }
+@media (prefers-reduced-motion: reduce) { .chev { transition:none } }
+</style>
+<div class="wrap">
+<header>
+  <h1>BaF⁺ extraction from a plain cylindrical neon cell</h1>
+  <p class="sub">30.5 mm bore × 45.5 mm chamber, 5 mm apertures, 23 K neon at 5–50 SCCM; BaF⁺ injected on axis at 0.2–5 keV
+  (computed BaF⁺–Ne cross-section table). DSMC lattice: every lattice cell ≤ 2 neon mean free paths and the time step below the local
+  collision time. Click a flow to list its runs; click a run for its trajectories and plots.</p>
+  <p class="meta" id="meta"></p>
+</header>
+<section class="panel"><h2>Runs</h2><div class="tablewrap"><table id="flows"></table></div></section>
+<section><h2>Scan figures</h2><div id="figs"></div></section>
+</div>
+<script>
+const DATA = /*__DATA__*/null;
+const TIP = {
+  flow: "Neon flow into the cell (standard cubic centimetres per minute).",
+  neon: "State of the neon DSMC run for this flow (SPARTA). Percent = progress through the production steps.",
+  lattice: "DSMC lattice spacing in the chamber: the starting spacing, then the refined spacings the run added where the gas was dense (mm). Chosen per flow so every lattice cell is at most 2 mean free paths.",
+  rule: "Post-run check on the averaged field: every lattice cell at most 2 mean free paths across, and the time step shorter than the local mean collision time. Wall-cut slivers are skipped.",
+  n: "Volume-averaged neon number density in the chamber (m⁻³), from the averaged field.",
+  ratio: "Chamber density divided by the molecular-flow aperture law n = 4Q/(c̄A) (Steinmacher et al. eq. 2).",
+  traced: "Beam energies traced so far, out of 25 (200 eV to 5 keV in 200 eV steps).",
+  best: "Highest thermalized extraction over the energies traced so far, and the energy where it occurs.",
+  E: "BaF⁺ beam energy at injection (lab frame), on axis at the inlet aperture.",
+  ions: "Ions traced at this flow and energy.",
+  extr: "Ions that leave through the outlet aperture, % of injected (95% Wilson interval).",
+  therm: "Extracted ions with kinetic energy below 0.1 eV when they leave, % of injected (95% interval).",
+  back: "Ions that leave back through the inlet aperture, % of injected.",
+  wall: "Ions that hit a wall (lost), % of injected.",
+  stop: "Mean depth where ions first drop below 1 eV (mm from the inlet wall); % of ions that ever do.",
+  tmed: "Median time from injection to leaving through the outlet, for extracted ions (ms)."
+};
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const th = (k, label) => `<th title="${esc(TIP[k])}">${label}<span class="q" aria-hidden="true">?</span></th>`;
+const pct = v => v && v[0] !== null ? `${v[0].toFixed(1)}%` : "–";
+const ci = v => v && v[0] !== null ? `<span class="meta">(${v[1].toFixed(1)}–${v[2].toFixed(1)})</span>` : "";
+const m = DATA.meta;
+document.getElementById("meta").textContent =
+  `Updated ${m.updated} · jobs running ${m.running}, queued ${m.queued} · runs traced ${m.traced} of ${m.total} · /ceph use ${m.ceph}`;
+
+const tbl = document.getElementById("flows");
+const NCOL = 8;
+tbl.innerHTML = `<thead><tr>${th("flow","Flow")}${th("neon","Neon DSMC")}${th("lattice","Lattice")}${th("rule","Grid rule")}` +
+  `${th("n","Chamber n (m⁻³)")}${th("ratio","vs aperture law")}${th("traced","Energies traced")}${th("best","Best thermalized")}</tr></thead><tbody></tbody>`;
+const body = tbl.tBodies[0];
+for (const fl of DATA.flows) {
+  const tr = document.createElement("tr");
+  tr.className = "flow"; tr.tabIndex = 0; tr.setAttribute("role", "button"); tr.setAttribute("aria-expanded", "false");
+  const p = 100 * fl.runs.length / 25;
+  tr.innerHTML = `<td class="num"><span class="chev">▸</span> ${fl.f} SCCM</td>` +
+    `<td><span class="chip ${esc(fl.neon)}">${esc(fl.neon)}${fl.prog ? " " + esc(fl.prog) : ""}</span></td>` +
+    `<td class="num">${fl.lattice ? esc(fl.lattice) + " mm" : ""}${fl.lattices && fl.lattices.split(" / ").length > 1 ? `<span class="meta"> (${esc(fl.lattices)})</span>` : ""}</td>` +
+    `<td>${fl.rule ? `<span class="chip ${fl.rule}">${fl.rule}</span>` : ""}</td>` +
+    `<td class="num">${esc(fl.n)}</td><td class="num">${fl.ratio ? esc(fl.ratio) + "×" : ""}</td>` +
+    `<td><span class="bar"><i style="width:${p}%"></i></span><span class="meta">${fl.runs.length}/25</span></td>` +
+    `<td class="num">${fl.best ? `${fl.best[0].toFixed(1)}% at ${fl.best[1] / 1000} keV` : "–"}</td>`;
+  const sub = document.createElement("tr");
+  sub.className = "runs"; sub.hidden = true;
+  sub.innerHTML = `<td colspan="${NCOL}"></td>`;
+  body.append(tr, sub);
+  const toggle = () => {
+    const open = tr.getAttribute("aria-expanded") !== "true";
+    tr.setAttribute("aria-expanded", String(open)); sub.hidden = !open;
+    if (open && !sub.dataset.built) { buildRuns(fl, sub.firstChild); sub.dataset.built = "1"; }
+  };
+  tr.addEventListener("click", toggle);
+  tr.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } });
+}
+
+function buildRuns(fl, cell) {
+  if (!fl.runs.length) { cell.innerHTML = `<p class="empty">No runs traced yet for ${fl.f} SCCM.</p>`; return; }
+  const t = document.createElement("table");
+  t.innerHTML = `<thead><tr>${th("E","Energy")}${th("ions","Ions")}${th("extr","Extracted")}${th("therm","Thermalized")}` +
+    `${th("back","Back out inlet")}${th("wall","Wall")}${th("stop","Stop depth")}${th("tmed","Transit time")}</tr></thead><tbody></tbody>`;
+  for (const r of fl.runs) {
+    const tr = document.createElement("tr");
+    tr.className = "run"; tr.tabIndex = 0; tr.setAttribute("role", "button"); tr.setAttribute("aria-expanded", "false");
+    tr.innerHTML = `<td class="num"><span class="chev">▸</span> ${(r.E / 1000).toFixed(1)} keV</td><td class="num">${r.n}</td>` +
+      `<td class="num">${pct(r.extr)} ${ci(r.extr)}</td><td class="num">${pct(r.therm)} ${ci(r.therm)}</td>` +
+      `<td class="num">${r.back.toFixed(1)}%</td><td class="num">${r.wall.toFixed(1)}%</td>` +
+      `<td class="num">${r.stop_mm != null ? r.stop_mm.toFixed(1) + " mm" : "–"}${r.stop_frac != null ? ` <span class="meta">(${r.stop_frac}%)</span>` : ""}</td>` +
+      `<td class="num">${r.t_med_ms != null ? r.t_med_ms.toFixed(2) + " ms" : "–"}</td>`;
+    const det = document.createElement("tr");
+    det.className = "detail"; det.hidden = true; det.innerHTML = `<td colspan="8"></td>`;
+    t.tBodies[0].append(tr, det);
+    const toggle = () => {
+      const open = tr.getAttribute("aria-expanded") !== "true";
+      tr.setAttribute("aria-expanded", String(open)); det.hidden = !open;
+      if (open && !det.dataset.built) { buildDetail(fl, r, det.firstChild); det.dataset.built = "1"; }
+    };
+    tr.addEventListener("click", toggle);
+    tr.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } });
+  }
+  cell.append(t);
+}
+
+function buildDetail(fl, r, cell) {
+  const gif = r.gif ? `<figure><img src="${esc(r.gif)}" alt="BaF+ trajectories at ${fl.f} SCCM, ${r.E} eV" loading="lazy">` +
+    `<figcaption>40 ions, log time to 1 ms then linear; color = eventual fate (blue extracted, orange wall, green back out the inlet).</figcaption></figure>`
+    : `<p class="empty">Trajectory GIF not rendered yet.</p>`;
+  cell.innerHTML = `<div class="det">${gif}<dl class="kv">` +
+    `<dt>Flow / energy</dt><dd>${fl.f} SCCM, ${(r.E / 1000).toFixed(1)} keV</dd>` +
+    `<dt>Ions traced</dt><dd>${r.n}</dd>` +
+    `<dt>Extracted</dt><dd>${pct(r.extr)} ${ci(r.extr)}</dd>` +
+    `<dt>Thermalized (&lt;0.1 eV)</dt><dd>${pct(r.therm)} ${ci(r.therm)}</dd>` +
+    `<dt>Back out the inlet</dt><dd>${r.back.toFixed(1)}%</dd><dt>Hit a wall</dt><dd>${r.wall.toFixed(1)}%</dd>` +
+    `<dt>Reach &lt;1 eV</dt><dd>${r.stop_frac != null ? r.stop_frac + "% of ions" : "–"}</dd>` +
+    `<dt>Mean stop depth</dt><dd>${r.stop_mm != null ? r.stop_mm.toFixed(1) + " mm" : "–"}</dd>` +
+    `<dt>Median exit KE</dt><dd>${r.ke_med_eV != null ? r.ke_med_eV + " eV" : "–"}</dd>` +
+    `<dt>Median transit</dt><dd>${r.t_med_ms != null ? r.t_med_ms.toFixed(2) + " ms" : "–"}</dd>` +
+    `<dt>Neon chamber n</dt><dd>${esc(fl.n) || "–"} m⁻³</dd></dl>` +
+    `<figure class="full"><img src="${esc(r.png)}" alt="Energy loss vs depth, stopping-depth and exit-energy histograms" loading="lazy"></figure></div>`;
+}
+
+const figs = document.getElementById("figs");
+if (DATA.figs.length) {
+  figs.className = "figs";
+  figs.innerHTML = DATA.figs.map(f => `<figure class="panel"><img src="${esc(f.src)}" alt="${esc(f.cap)}"><figcaption>${esc(f.cap)}</figcaption></figure>`).join("");
+} else {
+  figs.innerHTML = `<p class="empty panel">No tracer results yet. Figures appear here as flows finish.</p>`;
+}
+</script>

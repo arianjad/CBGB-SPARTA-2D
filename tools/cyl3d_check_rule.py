@@ -46,6 +46,7 @@ def main():
         f = np.array([frac.get(int(i), 1.0) for i in v[:, 0]])
         print(f"skipping {(gas & (f < a.fmin)).sum()} wall-cut cells with gas fraction < {a.fmin}")
         gas &= f >= a.fmin
+    T = np.maximum(T, 3.0)   # same 3 K floor as in.ne_cyl3d_run (TFLOOR): nearly empty cells sample T ~ 0
     lam = 1 / (math.pi * math.sqrt(2) * d**2 * n[gas] * (tref / T[gas])**(w - 0.5))
     tau = 1 / (2 * d**2 * n[gas] * math.sqrt(2 * math.pi * KB * tref / (M / 2)) * (T[gas] / tref)**(1 - w))
     kn = lam / size[gas]
