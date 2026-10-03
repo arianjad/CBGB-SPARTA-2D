@@ -47,6 +47,10 @@ tr.detail > td { background:var(--panel); padding:12px; white-space:normal }
 figure { margin:0; display:grid; gap:6px } figure img { width:100%; border-radius:6px; background:#fff }
 figcaption { font-size:13px; color:var(--muted) }
 .empty { color:var(--muted); font-style:italic }
+.steady { display:grid; gap:8px; margin:0 0 12px; max-width:900px }
+.steady p { margin:0; font-size:13px }
+.steady img { width:100%; border-radius:6px; background:#fff; border:1px solid var(--line) }
+.chip.steady-ok { color:var(--good) } .chip.steady-no { color:var(--bad) } .chip.steady-wait { color:var(--accent) }
 .switch { display:inline-flex; gap:0; border:1px solid var(--line); border-radius:8px; overflow:hidden; margin-top:12px }
 .switch button { font:600 13px var(--body); padding:7px 14px; border:0; background:var(--panel); color:var(--muted); cursor:pointer }
 .switch button + button { border-left:1px solid var(--line) }
@@ -145,8 +149,24 @@ function render(key) {
     all.map(f => `<figure class="panel"><img src="${esc(f.src)}" alt="${esc(f.cap)}"><figcaption>${esc(f.cap)}</figcaption></figure>`).join("");
 }
 
+function steadyBlock(fl) {
+  const s = fl.steady || {};
+  if (!s.status) return "";
+  const cls = s.status === "steady" ? "steady-ok" : s.status === "not steady" ? "steady-no" : "steady-wait";
+  let txt = "";
+  if (s.status === "steady") txt = `Steady after ${s.t_ms} ms of simulated time (${s.windows} windows); particle count changed ${(100 * s.change).toFixed(2)}% over the last 20 ms (threshold 0.2%).`;
+  else if (s.status === "not steady") txt = `Hit the 0.5 s cap before the particle count settled (last change ${(100 * s.change).toFixed(2)}% per 20 ms); averaged anyway.`;
+  else if (s.status === "settling") txt = "Still settling: the run stops by itself once the particle count changes less than 0.2% per 20 ms.";
+  else if (s.status === "fixed run length") txt = "Ran a fixed 0.1 s (before the steady-state check existed).";
+  else txt = "Run stopped before finishing.";
+  const ratio = s.ratio != null ? ` Latest gas outflow / inflow: ${s.ratio.toFixed(3)} (1 = steady mass balance).` : "";
+  return `<div class="steady"><p><span class="chip ${cls}">${esc(s.status)}</span> ${txt}${ratio}</p>` +
+    (s.png ? `<img src="${esc(s.png)}" alt="Particle count and gas outflow over inflow vs simulated time for ${fl.f} SCCM" loading="lazy">` : "") + `</div>`;
+}
+
 function buildRuns(fl, cell) {
-  if (!fl.runs.length) { cell.innerHTML = `<p class="empty">No runs traced yet for ${fl.f} SCCM.</p>`; return; }
+  cell.insertAdjacentHTML("beforeend", steadyBlock(fl));
+  if (!fl.runs.length) { cell.insertAdjacentHTML("beforeend", `<p class="empty">No runs traced yet for ${fl.f} SCCM.</p>`); return; }
   const t = document.createElement("table");
   t.innerHTML = `<thead><tr>${th("E","Energy")}${th("ions","Ions")}${th("extr","Extracted")}${th("therm","Thermalized")}` +
     `${th("back","Back out inlet")}${th("wall","Wall")}${th("stop","Stop depth")}${th("tmed","Transit time")}</tr></thead><tbody></tbody>`;

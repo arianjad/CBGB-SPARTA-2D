@@ -17,7 +17,7 @@
 # grid adapted at the start): tools/wsl/cyl3d_flow_params.sh. Options (env):
 #   CONFIG   port geometry: ports (default) or ap5 (see cyl3d_flow_params.sh)
 #   RUNBASE  data dir under ~/orcd/scratch/cbgb-sparta-3d (default cyl-ports / cyl-scan)
-#   SIM_S    simulated seconds (default 0.3 ports, 0.1 ap5)
+#   SIM_S    cap on simulated seconds; runs stop at steady state (default cap 0.5 s ports, 0.1 ap5)
 #   STEPS    adapt, then run only this many production steps (smoke tests)
 #   NDUMP    windows at the end that write field.grid frames (default 3)
 #   KNMIN    cell <= lambda / KNMIN (default 0 = fixed lattice for ports, 0.5 for ap5)
@@ -43,11 +43,11 @@ cp -n "$CASEDIR"/in.ne_cyl3d_run "$CASEDIR"/in.ne_cyl3d_resume "$CASEDIR"/$SURF 
 cd "$RUNDIR"
 SPA="$HOME/opt/sparta-27Aug2026/bin/spa_mpi"
 
-if [ -n "${STEPS:-}" ]; then   # smoke test: fresh run of STEPS steps, one window
+if [ -n "${STEPS:-}" ]; then   # smoke test: windows of STEPS steps; loose TOL forces the steady path after 2, then 1 averaging window
   echo "SMOKE SCCM=$SCCM MDOT=$MDOT FILLN=$FILLN FNUM=$FNUM DT=$DT REFINE=$REFINE ADAPT_STEPS=$ADAPT_STEPS STEPS=$STEPS NP=$SLURM_NTASKS" | tee -a scan.log
   mpirun -np "$SLURM_NTASKS" "$SPA" -in in.ne_cyl3d_run -var MDOT $MDOT -var FILLN $FILLN -var FNUM $FNUM \
     -var DT $DT -var REFINE $REFINE -var ADAPT_STEPS $ADAPT_STEPS -var NADAPT $NADAPT -var KNMIN $KN -var SURF $SURF -var XOUT $XOUT \
-    -var DUMPFREQ $STEPS -var CHECKPOINT_STEPS $STEPS -var NSKIP 0 -var NDUMPWIN 1 &> run.log
+    -var DUMPFREQ $STEPS -var CHECKPOINT_STEPS $STEPS -var MAXWIN 3 -var MINWIN 2 -var TOL 2 -var NDUMPWIN 1 &> run.log
   rc=$?; grep -h "^ADAPT\|^STRICT RULE" log.sparta | tee -a scan.log
   grep -q "^STRICT RULE VIOLATED" log.sparta && rc=3
   echo "$(date) smoke exit $rc" | tee -a scan.log; exit $rc
@@ -74,16 +74,30 @@ done
 for b in $(ls restart.base.* 2>/dev/null | sed 's/restart.base.//' | sort -n -r | tail -n +3); do
   [ "$b" -lt "$LAST" ] && rm -f restart.*."$b"
 done
-N=$(( (TOTAL - LAST) / WINDOW ))
-if [ "$N" -le 0 ]; then echo "already complete at step $LAST" | tee -a scan.log; exit 0; fi
-echo "CONFIG=$CONFIG SCCM=$SCCM MDOT=$MDOT FILLN=$FILLN FNUM=$FNUM DT=$DT REFINE=$REFINE ($CELL_MM mm) ADAPT_STEPS=$ADAPT_STEPS NADAPT=$NADAPT WINDOW=$WINDOW TOTAL=$TOTAL NP=$SLURM_NTASKS" >> scan.log
-NDUMPWIN=$(( N < ${NDUMP:-3} ? N : ${NDUMP:-3} )); NSKIP=$(( N - NDUMPWIN ))   # field.grid only in the last windows
+# Production runs to steady state (see in.ne_cyl3d_run), capped at TOTAL steps
+# (SIM_S); steady.txt records STEADY / PRODUCTION DONE across restarts.
+NDUMP="${NDUMP:-3}"; MAXWIN=$(( TOTAL / WINDOW )); STEADYDONE=0; NDUMPWIN=$NDUMP; MINWIN=5
+if [ "$LAST" -gt 0 ] && grep -q "PRODUCTION DONE" steady.txt 2>/dev/null; then
+  echo "already complete at step $LAST" | tee -a scan.log; exit 0
+fi
+if [ "$LAST" -gt 0 ]; then
+  S=$(grep -o "STEADY at step [0-9]*" steady.txt 2>/dev/null | tail -1 | awk '{print $4}')
+  if [ -n "$S" ]; then
+    STEADYDONE=1; NDUMPWIN=$(( NDUMP - (LAST - S) / WINDOW ))
+    [ "$NDUMPWIN" -le 0 ] && { echo "averaging windows already done at step $LAST" | tee -a scan.log; echo "PRODUCTION DONE" >> steady.txt; exit 0; }
+  else
+    MAXWIN=$(( MAXWIN - LAST / WINDOW )); [ "$MAXWIN" -lt 1 ] && MAXWIN=1
+    MINWIN=$(( 5 - LAST / WINDOW )); [ "$MINWIN" -lt 3 ] && MINWIN=3
+  fi
+fi
+echo "CONFIG=$CONFIG SCCM=$SCCM MDOT=$MDOT FILLN=$FILLN FNUM=$FNUM DT=$DT REFINE=$REFINE ($CELL_MM mm) ADAPT_STEPS=$ADAPT_STEPS NADAPT=$NADAPT WINDOW=$WINDOW MAXSTEPS=$TOTAL NP=$SLURM_NTASKS" >> scan.log
 COMMON="-var MDOT $MDOT -var FILLN $FILLN -var FNUM $FNUM -var DT $DT \
-        -var DUMPFREQ $WINDOW -var CHECKPOINT_STEPS $WINDOW -var NSKIP $NSKIP -var NDUMPWIN $NDUMPWIN"
+        -var DUMPFREQ $WINDOW -var CHECKPOINT_STEPS $WINDOW -var MAXWIN $MAXWIN -var MINWIN $MINWIN \
+        -var NDUMPWIN $NDUMPWIN -var STEADYDONE $STEADYDONE"
 if [ "$LAST" -eq 0 ]; then
   # (a run killed during the short adaptation phase just starts over)
-  echo "$(date) job $SLURM_JOB_ID: fresh start (adapt, then $N windows)" | tee -a scan.log
-  rm -f field.grid
+  echo "$(date) job $SLURM_JOB_ID: fresh start (adapt, then up to $MAXWIN windows to steady state + $NDUMPWIN averaging)" | tee -a scan.log
+  rm -f field.grid steady.txt
   mpirun -np "$SLURM_NTASKS" "$SPA" -in in.ne_cyl3d_run $COMMON \
     -var REFINE $REFINE -var ADAPT_STEPS $ADAPT_STEPS -var NADAPT $NADAPT -var KNMIN $KN -var SURF $SURF -var XOUT $XOUT &> run.log
 else
@@ -92,11 +106,12 @@ else
           'prev != "" && $2+0 > s {print prev; exit} /ITEM: TIMESTEP/ {prev=$1; next} {prev=""}')
     [ -n "$cut" ] && truncate -s "$cut" field.grid
   fi
-  echo "$(date) job $SLURM_JOB_ID: resume from step $LAST, $N windows" | tee -a scan.log
+  echo "$(date) job $SLURM_JOB_ID: resume from step $LAST (steady reached: $STEADYDONE; max $MAXWIN settle windows, $NDUMPWIN averaging)" | tee -a scan.log
   mpirun -np "$SLURM_NTASKS" "$SPA" -in in.ne_cyl3d_resume -var RESTARTFILE "restart.%.$LAST" $COMMON &>> run.log
 fi
 rc=$?
-grep -h "^ADAPT\|^STRICT RULE" log.sparta | tee -a scan.log
+grep -h "^ADAPT\|^STRICT RULE\|STEADY\|PRODUCTION DONE" log.sparta | tee -a scan.log
 grep -q "^STRICT RULE VIOLATED" log.sparta && rc=3   # SPARTA's quit exits 0
+[ "$rc" -eq 0 ] && ! grep -q "PRODUCTION DONE" steady.txt 2>/dev/null && { echo "solver ended before PRODUCTION DONE" | tee -a scan.log; rc=4; }
 echo "$(date) job $SLURM_JOB_ID: solver exit code $rc" | tee -a scan.log
 exit "$rc"

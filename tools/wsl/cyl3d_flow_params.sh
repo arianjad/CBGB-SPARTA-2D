@@ -8,7 +8,8 @@
 #          on the old cell: 2.15e22 at 17 SCCM). Fixed 0.4 mm lattice (KNMIN 0): a
 #          cell <= 2 lambda grid would cost ~5M core-h at these densities; the old
 #          17 SCCM test found 0.41 and 0.20 mm grids agree on extraction. dt < tau
-#          stays strict. 0.3 s simulated (gas residence time ~0.13 s).
+#          stays strict. Runs stop at steady state (in.ne_cyl3d_run); SIM_S = 0.5 s is
+#          only the cap (gas residence time ~0.13 s) and sizes the walltime request.
 #   ap5    5 mm apertures through 1.27 mm plates, data in cyl-scan (2026-10-03 run,
 #          stopped after 5-15 SCCM): 2.9e20 per SCCM, KNMIN 0.5, 0.1 s.
 # It also sets KN (the KNMIN in effect), SIMS (simulated seconds), SURF, XOUT (outlet face x, m), AEFF_MM2 (Clausing-weighted port area
@@ -48,7 +49,7 @@ cyl_flow_params() {
   local f=$1
   CONFIG="${CONFIG:-ports}"
   case "$CONFIG" in
-    ports) NPER=1.26e21; KN="${KNMIN:-0}"; SIMS="${SIM_S:-0.3}"; SURF=cell_cyl3d_ports.surf; XOUT=0.050804
+    ports) NPER=1.26e21; KN="${KNMIN:-0}"; SIMS="${SIM_S:-0.5}"; SURF=cell_cyl3d_ports.surf; XOUT=0.050804
            AEFF_MM2=6.6; RUNBASE_DEF=cyl-ports ;;
     ap5)   NPER=2.9e20; KN="${KNMIN:-0.5}"; SIMS="${SIM_S:-0.1}"; SURF=cell_cyl3d.surf; XOUT=0.04674
            AEFF_MM2=39.27; RUNBASE_DEF=cyl-scan ;;

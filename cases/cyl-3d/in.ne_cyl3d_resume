@@ -1,7 +1,7 @@
 # Resume in.ne_cyl3d_run from a restart file (written on an averaging-window edge).
-# Pass RESTARTFILE, MDOT, FILLN, FNUM, DT, DUMPFREQ, CHECKPOINT_STEPS and
-# NSKIP, NDUMPWIN (remaining windows without / with field.grid output) with
-# -var. field.grid is appended to.
+# Pass RESTARTFILE, MDOT, FILLN, FNUM, DT, DUMPFREQ, CHECKPOINT_STEPS, MAXWIN,
+# NDUMPWIN and STEADYDONE with -var (see the production block). field.grid is
+# appended to.
 
 seed        8675309
 read_restart ${RESTARTFILE}
@@ -25,17 +25,39 @@ fix         ag ave/grid all 10 ${NREP} ${DUMPFREQ} c_cg[*] c_tg[*]
 stats       5000
 stats_style step cpu np nattempt ncoll f_src[1] f_src[2] f_ab[1] f_ab[2] f_ab[3] f_ab[4] f_ab[5] f_ab[6]
 
-# NSKIP windows without field output (settling), then NDUMPWIN windows that
-# also dump the window-averaged field to field.grid (storage: only the last
-# few frames are kept on disk; the freeze uses the last 20 ms)
-if          "${NSKIP} == 0" then "jump SELF skipdone"
-variable    loop_s loop ${NSKIP}
-label       skip
+# Run to steady state, then average. After every window (DUMPFREQ steps =
+# CHECKPOINT_STEPS) the particle count is compared with its value two windows
+# earlier; the flow is steady once |dN|/N < TOL (default 0.002 per 20 ms; with
+# gas residence times ~0.1 s that leaves the field within ~1-2% of its final
+# state), after at least MINWIN windows. MAXWIN caps the windows left in this
+# job (the run stops with a NOT STEADY warning). Then NDUMPWIN windows also
+# dump the window-averaged field to field.grid and the run ends.
+# STEADYDONE = 1 (a resumed job that already reached steady state) goes straight
+# to the dump windows. The STEADY / NOT STEADY / PRODUCTION DONE lines also go to
+# steady.txt, which sbatch_cyl3d_neon.sh reads on a resume.
+variable    TOL index 0.002
+variable    MINWIN index 5
+variable    STEADYDONE index 0
+variable    iw equal 0
+variable    p1 equal 0
+variable    p2 equal 0
+variable    p3 equal 0
+variable    nnow equal np
+variable    stp equal step
+if          "${STEADYDONE} == 1" then "jump SELF steady"
+label       settle
 run         ${CHECKPOINT_STEPS}
 write_restart restart.%.*
-next        loop_s
-jump        SELF skip
-label       skipdone
+variable    iw equal ${iw}+1
+variable    p3 equal ${p2}
+variable    p2 equal ${p1}
+variable    p1 equal ${nnow}
+variable    dev equal abs(${p1}-${p3})/${p1}
+print       "WINDOW ${iw}: np ${p1}, change over 2 windows ${dev}"
+if          "${iw} >= ${MINWIN} && ${dev} < ${TOL}" then "print 'STEADY at step ${stp} after ${iw} windows (change ${dev})' append steady.txt" "jump SELF steady"
+if          "${iw} >= ${MAXWIN}" then "print 'NOT STEADY at step ${stp} after ${iw} windows (change ${dev}); averaging anyway' append steady.txt" "jump SELF steady"
+jump        SELF settle
+label       steady
 
 dump        gd grid all ${DUMPFREQ} field.grid id xc yc zc xlo ylo zlo xhi yhi zhi f_ag[*]
 dump_modify gd append yes
@@ -45,3 +67,4 @@ run         ${CHECKPOINT_STEPS}
 write_restart restart.%.*
 next        loop_i
 jump        SELF loop
+print       "PRODUCTION DONE" append steady.txt

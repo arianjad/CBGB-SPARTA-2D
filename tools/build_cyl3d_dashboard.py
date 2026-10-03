@@ -156,6 +156,8 @@ def flow_row(f, runbase, jobs, jobpfx):
         neon = st.lower()
     elif "STRICT RULE VIOLATED" in log or re.search(r"solver exit code [1-9]", log):
         neon = "failed"
+    elif "fresh start" in log or "resume from" in log:
+        neon = "stopped"
     else:
         neon = "not started"
     mr = re.search(r"chamber <n> ([\d.e+-]+) m\^-3 vs aperture law \(eq. 2\) ([\d.e+-]+) \(([\d.]+)x\)", rule)
@@ -170,6 +172,62 @@ def flow_row(f, runbase, jobs, jobpfx):
                 lattices=" / ".join(x for x in sizes.group(1).split() if x != "1.6") if sizes else "",
                 rule="pass" if "SATISFIED" in rule else ("fail" if "VIOLATED" in rule else ""),
                 n=mr.group(1) if mr else "", ratio=mr.group(3) if mr else "", runs=[])
+
+
+def steady_info(d, png, f, neon):
+    """Steady-state diagnostics of one neon run: STEADY line from steady.txt, and a figure of the
+    particle count and gas outflow / inflow vs simulated time from the run.log stats lines."""
+    log = open(f"{d}/scan.log").read() if os.path.exists(f"{d}/scan.log") else ""
+    par = {k: float(v) for k, v in re.findall(r"\b(DT|MDOT|FNUM)=([\d.e+-]+)", log)}
+    st = open(f"{d}/steady.txt").read() if os.path.exists(f"{d}/steady.txt") else ""
+    m = re.findall(r"(NOT )?STEADY at step (\d+) after (\d+) windows \(change ([\d.e+-]+)\)", st)
+    info = dict(status="", t_ms=None, windows=None, change=None, png=None, ratio=None)
+    if m:
+        no, step, win, ch = m[-1]
+        info.update(status="not steady" if no else "steady", windows=int(win), change=float(ch),
+                    t_ms=round(int(step) * par.get("DT", 0) * 1e3, 1) if par.get("DT") else None)
+    elif "STRICT RULE" in log or not os.path.exists(f"{d}/run.log"):
+        return info
+    if not os.path.exists(f"{d}/run.log") or "DT" not in par:
+        return info
+    rows = {}
+    for line in open(f"{d}/run.log"):
+        p = line.split()
+        if len(p) == 13 and p[0].isdigit():
+            try:
+                v = [float(x) for x in p]
+            except ValueError:
+                continue
+            if sum(v[7:13]) > 0:
+                rows[int(v[0])] = v
+    if not rows:
+        return info
+    a = np.array([rows[k] for k in sorted(rows)])
+    t = a[:, 0] * par["DT"] * 1e3
+    inflow = par["MDOT"] / (20.1797 * 1.66053907e-27 * par["FNUM"]) * par["DT"]     # particles per step
+    ratio = a[:, 7:13].sum(axis=1) / inflow
+    info["ratio"] = round(float(ratio[-1]), 3)
+    if not info["status"]:
+        info["status"] = {"done": "fixed run length", "running": "settling"}.get(neon, "stopped")
+    if not os.path.exists(png) or os.path.getmtime(png) < os.path.getmtime(f"{d}/run.log"):
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        fig, ax = plt.subplots(1, 2, figsize=(10, 2.8))
+        ax[0].plot(t, a[:, 2] / 1e6, color=C1, lw=2, marker="o", ms=3)
+        ax[0].set_ylabel("simulated particles (M)"); ax[0].set_title("Particle count", fontsize=10)
+        ax[1].plot(t, ratio, color=C1, lw=2, marker="o", ms=3)
+        ax[1].axhline(1, color=MUTED, lw=1, ls="--")
+        ax[1].set_ylabel("outflow / inflow"); ax[1].set_title("Gas mass balance (5000-step averages)", fontsize=10)
+        for x in ax:
+            x.set_xlabel("simulated time (ms)"); x.grid(alpha=0.25)
+            if info["t_ms"] is not None:
+                x.axvline(info["t_ms"], color=INK, lw=1, ls=":")
+        fig.suptitle(f"{f} SCCM neon: approach to steady state" + (" (dotted: steady)" if info["t_ms"] is not None else ""),
+                     fontsize=10)
+        fig.tight_layout(); fig.savefig(png, dpi=90); plt.close(fig)
+    info["png"] = png
+    return info
 
 
 def fhash(p):
@@ -222,6 +280,10 @@ def main():
                 row["runs"].append(st)
             th = [(x["therm"][0], x["E"]) for x in row["runs"] if x["therm"][0] is not None]
             row["best"] = max(th) if th else None
+            sp = f"{SITE}/{c['run']}/flow_{f}.png"
+            row["steady"] = steady_info(d, sp, f, row["neon"])
+            if row["steady"]["png"]:
+                row["steady"]["png"] = f"{c['run']}/flow_{f}.png"
             flows.append(row)
         figs = []
         base = os.path.basename(c["fig"])
