@@ -136,11 +136,21 @@ def run_figure(d, cond, E, f, r, tr, ke, out):
 
 
 def small_gif(src, out):
+    """Downscale a trajectory GIF to GIF_W wide. All frames share one palette built
+    from the first, middle and last frames, without dithering, so the small fate
+    colours (blue extracted, orange wall, green back out) survive: quantizing each
+    frame on its own let the large grey areas take the palette and mapped those
+    dots to brown (fixed 2026-10-04)."""
     from PIL import Image, ImageSequence
     im = Image.open(src)
+    rgb = [f.convert("RGB") for f in ImageSequence.Iterator(im)]   # convert while iterating (frames share one object)
+    n = len(rgb)
+    sample = Image.new("RGB", (im.width, im.height * 3))
+    for k, i in enumerate((0, n // 2, n - 1)):
+        sample.paste(rgb[i], (0, im.height * k))
+    pal = sample.quantize(colors=255, method=Image.Quantize.MEDIANCUT)
     h = round(im.height * GIF_W / im.width)
-    fr = [f.convert("RGB").resize((GIF_W, h), Image.LANCZOS).quantize(colors=64, method=Image.Quantize.MEDIANCUT)
-          for f in ImageSequence.Iterator(im)]
+    fr = [f.resize((GIF_W, h), Image.LANCZOS).quantize(palette=pal, dither=Image.Dither.NONE) for f in rgb]
     fr[0].save(out, save_all=True, append_images=fr[1:], duration=im.info.get("duration", 83), loop=0, optimize=True)
 
 
@@ -239,6 +249,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--cond", default="table-central")
     ap.add_argument("--mark-published", action="store_true")
+    ap.add_argument("--redo-gifs", action="store_true", help="re-make every downscaled GIF (after a small_gif change)")
     a = ap.parse_args()
     manifest_p = f"{SITE}/.published.json"
     manifest = json.load(open(manifest_p)) if os.path.exists(manifest_p) else {}
@@ -274,7 +285,7 @@ def main():
                 st["png"] = f"{c['run']}/{f}_{E}.png"
                 src = f"{d}/post/gif/sccm{f}_{a.cond}_e{E}.gif"
                 gif = f"{SITE}/{c['run']}/{f}_{E}.gif"
-                if os.path.exists(src) and not os.path.exists(gif):
+                if os.path.exists(src) and (a.redo_gifs or not os.path.exists(gif)):
                     small_gif(src, gif)
                 st["gif"] = f"{c['run']}/{f}_{E}.gif" if os.path.exists(gif) else None
                 row["runs"].append(st)
