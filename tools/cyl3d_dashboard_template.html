@@ -154,9 +154,9 @@ function steadyBlock(fl) {
   if (!s.status) return "";
   const cls = s.status === "steady" ? "steady-ok" : s.status === "not steady" ? "steady-no" : "steady-wait";
   let txt = "";
-  if (s.status === "steady") txt = `Steady after ${s.t_ms} ms of simulated time (${s.windows} windows); particle count changed ${(100 * s.change).toFixed(2)}% over the last 20 ms (threshold 0.2%).`;
+  if (s.status === "steady") txt = `Steady after ${s.t_ms} ms of simulated time (${s.windows} windows); particle count changed ${(100 * s.change).toFixed(2)}% over the last 20 ms (threshold 0.5%).`;
   else if (s.status === "not steady") txt = `Hit the 0.5 s cap before the particle count settled (last change ${(100 * s.change).toFixed(2)}% per 20 ms); averaged anyway.`;
-  else if (s.status === "settling") txt = "Still settling: the run stops by itself once the particle count changes less than 0.2% per 20 ms.";
+  else if (s.status === "settling") txt = "Still settling: the run stops by itself once the particle count changes less than 0.5% per 20 ms.";
   else if (s.status === "fixed run length") txt = "Ran a fixed 0.1 s (before the steady-state check existed).";
   else txt = "Run stopped before finishing.";
   const ratio = s.ratio != null ? ` Latest gas outflow / inflow: ${s.ratio.toFixed(3)} (1 = steady mass balance).` : "";
