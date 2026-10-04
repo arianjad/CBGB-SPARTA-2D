@@ -1,12 +1,11 @@
 <title>Cylinder Cell Scan</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@600&family=IBM+Plex+Sans:wght@400;600&display=swap">
 <style>
 /* layout: one column; summary line, runs table (flow rows expand into energy rows, an energy row opens its run detail), scan figures */
 :root { --bg:#f6f7f5; --panel:#ffffff; --ink:#1d2321; --muted:#5f6864; --line:#dde2df; --hover:#f0f4f8;
   --accent:#2a78d6; --good:#1a7f4b; --warn:#a86a00; --bad:#c23b3b; --chip:#eef1ef; --sub:#fafbfa;
-  --display:"IBM Plex Sans Condensed","Arial Narrow",sans-serif; --body:"IBM Plex Sans",system-ui,sans-serif;
-  --mono:"IBM Plex Mono",ui-monospace,monospace; }
+  --display:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --body:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --mono:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg:#121615; --panel:#1a1f1d; --ink:#e7ecea;
   --muted:#9aa49f; --line:#2b3330; --hover:#22292d; --accent:#5598e7; --good:#4cc38a; --warn:#e0a63a; --bad:#ef7676;
   --chip:#232a27; --sub:#161b19; color-scheme:dark } }
@@ -14,18 +13,18 @@
   --accent:#5598e7; --good:#4cc38a; --warn:#e0a63a; --bad:#ef7676; --chip:#232a27; --sub:#161b19; color-scheme:dark }
 body { background:var(--bg); color:var(--ink); font:15px/1.5 var(--body) }
 .wrap { max-width:1150px; margin:0 auto; padding-inline:16px; padding-block:20px 48px; display:grid; gap:24px }
-h1 { font:600 26px/1.15 var(--display); margin:0; text-wrap:balance; letter-spacing:.01em }
-h2 { font:600 15px/1.2 var(--display); margin:0 0 10px; text-transform:uppercase; letter-spacing:.07em; color:var(--muted) }
+h1 { font:600 24px/1.2 var(--display); margin:0; text-wrap:balance }
+h2 { font:600 15px/1.2 var(--display); margin:0 0 10px; color:var(--muted) }
 .sub { color:var(--muted); margin:4px 0 0; max-width:75ch }
-.meta { font:12px var(--mono); color:var(--muted) }
+.meta { font:13px var(--body); color:var(--muted); font-variant-numeric:tabular-nums }
 .panel { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:16px; min-width:0 }
 .tablewrap { overflow-x:auto }
 table { border-collapse:collapse; width:100%; font-variant-numeric:tabular-nums; font-size:14px }
 th, td { text-align:left; padding:6px 10px; border-bottom:1px solid var(--line); white-space:nowrap }
-th { font:600 12px var(--body); text-transform:uppercase; letter-spacing:.05em; color:var(--muted); cursor:help }
+th { font:600 13px var(--body); color:var(--muted); cursor:help }
 th .q { display:inline-grid; place-items:center; width:14px; height:14px; margin-left:4px; border-radius:50%;
   border:1px solid var(--muted); font:600 9px var(--body); vertical-align:1px }
-td.num { font-family:var(--mono); font-size:13px }
+td.num { font-variant-numeric:tabular-nums; font-size:14px }
 tr.flow, tr.run { cursor:pointer } tr.flow:hover, tr.run:hover { background:var(--hover) }
 tr.flow:focus-visible, tr.run:focus-visible { outline:2px solid var(--accent); outline-offset:-2px }
 .chev { display:inline-block; width:12px; color:var(--muted); transition:transform .15s }
@@ -36,7 +35,7 @@ tr.detail > td { background:var(--panel); padding:12px; white-space:normal }
 .det { display:grid; gap:12px; grid-template-columns:minmax(0, 560px) minmax(0, 1fr); align-items:start }
 .det img { width:100%; border-radius:6px; background:#fff; border:1px solid var(--line) }
 .kv { display:grid; grid-template-columns:auto 1fr; gap:4px 14px; font-size:13px; align-content:start }
-.kv dt { color:var(--muted) } .kv dd { margin:0; font-family:var(--mono) }
+.kv dt { color:var(--muted) } .kv dd { margin:0; font-variant-numeric:tabular-nums }
 .full { grid-column:1 / -1 }
 .chip { display:inline-block; padding:1px 8px; border-radius:999px; background:var(--chip); font-size:12px }
 .chip.done, .chip.pass { color:var(--good) } .chip.running { color:var(--accent) }
