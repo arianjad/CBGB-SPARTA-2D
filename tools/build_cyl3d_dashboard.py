@@ -89,6 +89,9 @@ def run_stats(d, cond, E, outlet):
         x1 = x1_of(ions)
         ok = np.isfinite(x1)
         s["stop_frac"] = round(100 * ok.mean(), 1)
+        import pandas as pd
+        t01 = np.concatenate([pd.read_csv(p, comment="#").x_0p1eV.to_numpy(dtype=float) for p in ions])
+        s["cooled"] = round(100 * np.isfinite(t01).mean(), 1)   # % of injected ever below 0.1 eV
         s["stop_mm"] = round(float(np.mean(x1[ok])) * 1e3, 2) if ok.any() else None
     return s, r, tr, ke
 

@@ -105,20 +105,26 @@ def main():
             fo.write(f"{f},{E},{n},{k},{e[0]:.2f},{e[1]:.2f},{e[2]:.2f},{kt},{t[0]:.2f},{t[1]:.2f},{t[2]:.2f},{lost},{wall}\n")
     print(f"{len(rows)} (flow, energy) points -> {a.out}_summary.csv")
 
-    panels = [(3, "all extracted ions"), (4, f"thermalized (< {THERMAL_EV} eV at exit)")]
-    zmax = max(np.nanmax(grids(rows, c)[2]) for c, _ in panels) or 1.0
+    panels = [(3, "all extracted ions", "extracted (% of injected)"),
+              (4, f"extracted below {THERMAL_EV} eV", "extracted < 0.1 eV (% of injected)")]
+    zmax = max(np.nanmax(grids(rows, c)[2]) for c, _, _ in panels) or 1.0
 
     flows, ens, _ = grids(rows, 3)
-    if len(flows) > 1 and len(ens) > 1:
+    # the surface uses only flows with every energy traced: a partly traced flow would be
+    # drawn as straight "fins" across its missing energies (the heatmap shows partial flows)
+    nE = len(ens)
+    full = [r for r in rows if sum(1 for q in rows if q[0] == r[0]) == nE]
+    sflows = sorted({r[0] for r in full})
+    if len(sflows) > 1 and nE > 1:
         fig = plt.figure(figsize=(13, 5.6))
-        for i, (col, title) in enumerate(panels, 1):
-            F, E, Z = grids(rows, col)
+        for i, (col, title, zl) in enumerate(panels, 1):
+            F, E, Z = grids(full, col)
             X, Y = np.meshgrid(F, E / 1000)
             ax = fig.add_subplot(1, 2, i, projection="3d")
             ax.plot_surface(X, Y, np.ma.masked_invalid(Z), cmap=SEQ, vmin=0, vmax=zmax,
                             edgecolor="white", linewidth=0.3, antialiased=True)
             ax.set_xlabel("Ne flow (SCCM)", color=INK); ax.set_ylabel("BaF⁺ energy (keV)", color=INK)
-            ax.set_zlabel("extraction (%)", color=INK); ax.set_zlim(0, zmax * 1.05)
+            ax.set_zlabel(zl, color=INK); ax.set_zlim(0, zmax * 1.05)
             ax.set_title(title, color=INK, fontsize=11)
             ax.view_init(elev=28, azim=-130)
         ports = "old-cell ports" if a.config == "ports" else "5 mm apertures"
@@ -129,7 +135,7 @@ def main():
 
     fig, axs = plt.subplots(1, 2, figsize=(max(8, 1.0 * len(flows) * 2 + 3), max(4, 0.32 * len(ens) + 2)),
                             squeeze=False)
-    for ax, (col, title) in zip(axs[0], panels):
+    for ax, (col, title, zl) in zip(axs[0], panels):
         F, E, Z = grids(rows, col)
         im = ax.imshow(Z, origin="lower", aspect="auto", cmap=SEQ, vmin=0, vmax=zmax)
         ax.set_xticks(range(len(F)), [str(f) for f in F]); ax.set_yticks(range(len(E)), [str(e) for e in E])
@@ -139,7 +145,7 @@ def main():
             if np.isfinite(z):
                 ax.text(i, j, f"{z:.1f}", ha="center", va="center", fontsize=7,
                         color="white" if z > 0.55 * zmax else INK)
-        fig.colorbar(im, ax=ax, label="extraction (%)")
+        fig.colorbar(im, ax=ax, label=zl)
     fig.tight_layout(); fig.savefig(a.out + "_heatmap.png", dpi=150); plt.close(fig)
     print(f"-> {a.out}_heatmap.png")
     plot_diagnostics(a, sorted({r[0] for r in rows}))
@@ -172,14 +178,12 @@ def plot_diagnostics(a, flows):
             xs = np.unique(b)
             y = np.array([tot.values[b == v].sum() for v in xs]) / nions / 1.0
             x = xs + 0.5
-            ax.plot(x, y, color=CAT[k], lw=2)
-            m = x < 45.47
-            ax.annotate(f"{E/1000:g} keV", (x[m][-1], y[m][-1]), xytext=(6, 0), textcoords="offset points",
-                        color=INK, fontsize=9, va="center")
+            ax.plot(x, y, color=CAT[k], lw=2, label=f"{E/1000:g} keV")
         ax.axvspan(-1.27, 0, color="#b9b8b2", alpha=0.35, lw=0); ax.axvline(45.47, color=MUTED, lw=1, ls=":")
         ax.set_xlim(-2, 52); ax.set_xlabel("depth x from the inlet wall (mm)", color=INK)
         ax.set_ylabel("dE/dx per ion (eV/mm, 1 mm bins)", color=INK)
-        ax.set_title(f"BaF⁺ energy loss vs depth, {f} SCCM Ne (shaded: inlet aperture; dotted: outlet wall)",
+        ax.legend(fontsize=8, frameon=False, title="beam energy", title_fontsize=8)
+        ax.set_title(f"BaF⁺ energy loss vs depth, {f} SCCM Ne (shaded: inlet wall; dotted: outlet wall, inner face)",
                      color=INK, fontsize=10)
         ax.grid(alpha=0.25)
         fig.tight_layout(); fig.savefig(a.out + "_dedx.png", dpi=150); plt.close(fig)
@@ -187,19 +191,26 @@ def plot_diagnostics(a, flows):
     # mean depth at first KE < 1 eV vs energy, per flow
     fig, ax = plt.subplots(figsize=(7.5, 4.2)); any_ = False
     for j, f in enumerate(flows):
-        Es, xs = [], []
+        Es, xs, fr = [], [], []
         for pth in sorted(glob.glob(f"{BASE}/{a.runbase}/sccm{f}/post/tracer_{a.cond}-e*_s*_ions.csv")):
             E = int(re.search(r"-e(\d+)_s", pth).group(1))
-            x1 = pd.read_csv(pth, comment="#").x_1eV.dropna()
+            col = pd.read_csv(pth, comment="#").x_1eV
+            x1 = col.dropna()
             if len(x1):
-                Es.append(E); xs.append(x1.mean() * 1e3)
+                Es.append(E); xs.append(x1.mean() * 1e3); fr.append(len(x1) / len(col))
         if Es:
             o = np.argsort(Es); any_ = True
-            ax.plot(np.array(Es)[o] / 1000, np.array(xs)[o], color=SEQ_STEPS[min(j, 9)], lw=2, marker="o", ms=3,
+            Es, xs, fr = np.array(Es)[o] / 1000, np.array(xs)[o], np.array(fr)[o]
+            c = SEQ_STEPS[min(j, 9)]
+            ok = fr >= 0.1     # an average over <10% of the ions is not representative: hollow, no line
+            ax.plot(np.where(ok, Es, np.nan), np.where(ok, xs, np.nan), color=c, lw=2, marker="o", ms=3,
                     label=f"{f} SCCM")
+            if (~ok).any():
+                ax.plot(Es[~ok], xs[~ok], ls="none", marker="o", ms=4, mfc="none", mec=c)
     if any_:
-        ax.set_xlabel("BaF⁺ beam energy (keV)", color=INK); ax.set_ylabel("mean depth where KE < 1 eV (mm)", color=INK)
-        ax.set_title("Stopping depth", color=INK, fontsize=10); ax.grid(alpha=0.25)
+        ax.set_xlabel("BaF⁺ beam energy (keV)", color=INK); ax.set_ylabel("mean depth of first KE < 1 eV (mm)", color=INK)
+        ax.set_title("Stopping depth, averaged over the ions that drop below 1 eV (hollow: fewer than 10% do)",
+                     color=INK, fontsize=10); ax.grid(alpha=0.25)
         ax.legend(fontsize=8, ncol=2, frameon=False)
         fig.tight_layout(); fig.savefig(a.out + "_stopdepth.png", dpi=150)
         print(f"-> {a.out}_stopdepth.png")
