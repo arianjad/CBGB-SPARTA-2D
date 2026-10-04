@@ -82,12 +82,11 @@ const TIP = {
   n: "Volume-averaged neon number density in the chamber (m⁻³), from the averaged field.",
   ratio: "Simulated chamber density ÷ the simple molecular-flow prediction n = 4Q/(c̄·A_eff): inflow Q (atoms/s) balanced by atoms leaking out of the ports one at a time (c̄ = 155 m/s mean speed of 23 K neon; A_eff = port area × fraction that gets through each channel). 1 = gas behaves as that simple picture; below 1 = gas streams out of the ports faster than simple leakage (collisions in the ports), so the chamber holds less. The old CAD cell measured ~0.72.",
   traced: "Beam energies traced so far for this flow.",
-  best: "Highest 'extracted below 0.1 eV' over the energies traced so far, and the energy where it occurs.",
+  best: "Highest thermalized (extracted) % over the energies traced so far, and the energy where it occurs.",
   E: "BaF⁺ beam energy at injection (lab frame), on axis at the inlet aperture.",
   ions: "Ions traced at this flow and energy.",
   extr: "Ions that leave through the outlet aperture, % of injected (95% Wilson interval).",
   therm: "Ions that leave through the outlet with kinetic energy below 0.1 eV, as % of all injected ions (95% interval). This is the figure of merit: cold and out.",
-  cooled: "Ions that slow below 0.1 eV anywhere in the cell, whether or not they later get out, as % of all injected ions.",
   back: "Ions that leave back through the inlet aperture, % of injected.",
   wall: "Ions that hit a wall (lost), % of injected.",
   stop: "Mean depth where ions first drop below 1 eV (mm from the inlet wall); % of ions that ever do.",
@@ -118,7 +117,7 @@ function render(key) {
   document.getElementById("meta").textContent =
     `Updated ${m.updated} · jobs running ${m.running}, queued ${m.queued} · runs traced ${c.traced} of ${10 * c.nen} · /ceph use ${m.ceph}`;
   tbl.innerHTML = `<thead><tr>${th("flow","Flow")}${th("neon","Neon DSMC")}${th("lattice","Lattice")}${th("rule","Grid rule")}` +
-    `${th("n","Chamber n (m⁻³)")}${th("ratio","vs aperture law")}${th("traced","Energies traced")}${th("best","Best extracted < 0.1 eV")}</tr></thead><tbody></tbody>`;
+    `${th("n","Chamber n (m⁻³)")}${th("ratio","vs aperture law")}${th("traced","Energies traced")}${th("best","Best thermalized (extracted)")}</tr></thead><tbody></tbody>`;
   const body = tbl.tBodies[0];
   for (const fl of c.flows) {
     const tr = document.createElement("tr");
@@ -169,19 +168,18 @@ function buildRuns(fl, cell) {
   cell.insertAdjacentHTML("beforeend", steadyBlock(fl));
   if (!fl.runs.length) { cell.insertAdjacentHTML("beforeend", `<p class="empty">No runs traced yet for ${fl.f} SCCM.</p>`); return; }
   const t = document.createElement("table");
-  t.innerHTML = `<thead><tr>${th("E","Energy")}${th("ions","Ions")}${th("extr","Extracted")}${th("therm","Extracted < 0.1 eV")}${th("cooled","Thermalized in cell")}` +
+  t.innerHTML = `<thead><tr>${th("E","Energy")}${th("ions","Ions")}${th("extr","Extracted")}${th("therm","Thermalized (extracted)")}` +
     `${th("back","Back out inlet")}${th("wall","Wall")}${th("stop","Stop depth")}${th("tmed","Transit time")}</tr></thead><tbody></tbody>`;
   for (const r of fl.runs) {
     const tr = document.createElement("tr");
     tr.className = "run"; tr.tabIndex = 0; tr.setAttribute("role", "button"); tr.setAttribute("aria-expanded", "false");
     tr.innerHTML = `<td class="num"><span class="chev">▸</span> ${(r.E / 1000).toFixed(1)} keV</td><td class="num">${r.n}</td>` +
       `<td class="num">${pct(r.extr)} ${ci(r.extr)}</td><td class="num">${pct(r.therm)} ${ci(r.therm)}</td>` +
-      `<td class="num">${r.cooled != null ? r.cooled.toFixed(1) + "%" : "–"}</td>` +
       `<td class="num">${r.back.toFixed(1)}%</td><td class="num">${r.wall.toFixed(1)}%</td>` +
       `<td class="num">${r.stop_mm != null ? r.stop_mm.toFixed(1) + " mm" : "–"}${r.stop_frac != null ? ` <span class="meta">(${r.stop_frac}%)</span>` : ""}</td>` +
       `<td class="num">${r.t_med_ms != null ? r.t_med_ms.toFixed(2) + " ms" : "–"}</td>`;
     const det = document.createElement("tr");
-    det.className = "detail"; det.hidden = true; det.innerHTML = `<td colspan="9"></td>`;
+    det.className = "detail"; det.hidden = true; det.innerHTML = `<td colspan="8"></td>`;
     t.tBodies[0].append(tr, det);
     const toggle = () => {
       const open = tr.getAttribute("aria-expanded") !== "true";
@@ -202,8 +200,7 @@ function buildDetail(fl, r, cell) {
     `<dt>Flow / energy</dt><dd>${fl.f} SCCM, ${(r.E / 1000).toFixed(1)} keV</dd>` +
     `<dt>Ions traced</dt><dd>${r.n}</dd>` +
     `<dt>Extracted</dt><dd>${pct(r.extr)} ${ci(r.extr)}</dd>` +
-    `<dt>Extracted &lt; 0.1 eV</dt><dd>${pct(r.therm)} ${ci(r.therm)}</dd>` +
-    `<dt>Thermalized in cell</dt><dd>${r.cooled != null ? r.cooled.toFixed(1) + "% of injected" : "–"}</dd>` +
+    `<dt>Thermalized (extracted)</dt><dd>${pct(r.therm)} ${ci(r.therm)}</dd>` +
     `<dt>Back out the inlet</dt><dd>${r.back.toFixed(1)}%</dd><dt>Hit a wall</dt><dd>${r.wall.toFixed(1)}%</dd>` +
     `<dt>Reach &lt;1 eV</dt><dd>${r.stop_frac != null ? r.stop_frac + "% of ions" : "–"}</dd>` +
     `<dt>Mean stop depth</dt><dd>${r.stop_mm != null ? r.stop_mm.toFixed(1) + " mm" : "–"}</dd>` +
