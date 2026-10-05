@@ -2,6 +2,14 @@
 
 ## Open
 
+- **Tracer free-flight bias (found 2026-10-05, tools/sanity/).** The tracer drew each
+  free path with the gas density at the flight's start point, so ions starting in the
+  low-density inlet bore went 2-4 mm (12-22%) too deep and the entrance dE/dx was ~25%
+  low. Fix: `--max-flight` (null steps), wired into tools/wsl/sbatch_cyl3d_tracer.sh
+  as MAXFLIGHT (0.2 mm for every run except RUNBASE cyl-ports, which keeps 0 so the
+  current 200-point campaign is self-consistent). When that campaign is done: make
+  0.2 mm the tracer's own default, and note the bias next to the cyl-ports results
+  (and the old fluor-cell results, which used the same logic).
 - **Lattice-size convergence vs density (cyl-3d).** Find which DSMC lattice
   spacings are acceptable at which neon density, i.e. the largest
   lattice / mean-free-path ratio at which BaF+ extraction (and stopping depth)

@@ -259,6 +259,10 @@ function parse_commandline()
             help = "sigma of the gaussball mode, or radius of the uniformball mode (m)"
             arg_type = Float64
             default = 0.0
+        "--max-flight"
+            help = "if > 0, cap every free flight at this length (m) and redraw the free path at the new point (a null step: no collision). Needed where the gas density changes along a flight: without it each flight is drawn with the density at its start point, which sends ions starting in the low-density inlet bore several mm too deep (2026-10-05 sanity check, tools/sanity/). Exact for a memoryless process once the cap is below the density's length scale; ~half the DSMC lattice is enough. 0 (default for now) keeps the old behaviour, so the running cyl-3d ports campaign stays consistent."
+            arg_type = Float64
+            default = 0.0
         "--trajprint"
             help = "if nonzero N, print a row for EVERY leg of particles 1..N (negative idx in column 1). Cost is ~1 row per collision per traced particle, so keep N small (~12)."
             arg_type = Int
@@ -297,6 +301,8 @@ const SIGMA_LOGE, SIGMA_LOGQ = SIGMA_TABLE ?
 @printf(stderr, "cross-section model: %s%s\n", SIGMA_MODEL,
     SIGMA_TABLE ? " ($(args["sigma-table"]), $(args["sigma-table-variant"]))" : "")
 const TRAJPRINT = args["trajprint"]
+const MAX_FLIGHT = args["max-flight"]
+MAX_FLIGHT > 0 && @printf(stderr, "free flights capped at %.3g m (null steps)\n", MAX_FLIGHT)
 TRAJPRINT > 100 && @printf(stderr,
     "WARNING: --trajprint %d records all collision legs and can produce large output.\n", TRAJPRINT)
 args["sampler"] in ("table", "exact") || error("--sampler must be table or exact")
@@ -836,6 +842,9 @@ version.
         vrel = sqrt((v[1] - props[3])^2 + (v[2] - props[4])^2 + (v[3] - props[5])^2)
         dist = freePath(v, vrel, props[6], props[7])
         vmag = LinearAlgebra.norm(v)
+        # --max-flight: stop short and redraw with the density at the new point
+        nullstep = MAX_FLIGHT > 0.0 && dist > MAX_FLIGHT && vmag >= 1E-6
+        nullstep && (dist = MAX_FLIGHT)
         if vmag < 1E-6
             xnext .= x
         else
@@ -866,8 +875,17 @@ version.
         else
             isnothing(diag) || diag_flight!(diag, hspec, x, xnext, dist / max(vmag, 1e-30))
             time += dist / max(vmag, 1e-30)
-            collides += 1
             pathlen += dist
+            if nullstep
+                if TRAJPRINT != 0 && idx <= TRAJPRINT
+                    print(@sprintf("%d %e %e %e %e %e %e %e %e %e %d %e\n", -idx,
+                    x[1], x[2], x[3], xnext[1], xnext[2], xnext[3], v[1], v[2], v[3], collides, time))
+                end
+                x .= xnext
+                xmax = max(xmax, x[1]); rmax = max(rmax, sqrt(x[2]^2 + x[3]^2))
+                continue
+            end
+            collides += 1
             if TRAJPRINT != 0 && idx <= TRAJPRINT
                 print(@sprintf("%d %e %e %e %e %e %e %e %e %e %d %e\n", -idx,
                 x[1], x[2], x[3], xnext[1], xnext[2], xnext[3], v[1], v[2], v[3], collides, time))
