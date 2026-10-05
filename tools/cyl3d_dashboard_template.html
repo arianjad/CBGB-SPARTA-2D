@@ -77,9 +77,9 @@ const TIP = {
   flow: "Neon flow into the cell (standard cubic centimetres per minute).",
   neon: "State of the neon DSMC run for this flow (SPARTA). Percent = progress through the production steps.",
   lattice: "DSMC lattice spacing in the chamber (mm), and in parentheses any finer spacings the run added where the gas was dense.",
-  rule: "Post-run check on the averaged field: the time step shorter than the local mean collision time in every lattice cell (and, for the 5 mm configuration, every cell at most 2 mean free paths). Wall-cut slivers are skipped.",
+  rule: "Post-run check on the averaged field: the time step shorter than the local mean collision time everywhere on the lattice (and, for the 5 mm configuration, lattice spacing at most 2 mean free paths). Lattice elements cut to slivers by the wall are skipped.",
   n: "Volume-averaged neon number density in the chamber (m⁻³), from the averaged field.",
-  hl: "How fine the lattice is: lattice cell size ÷ neon mean free path (λ), from the chamber-average density and temperature, and in parentheses the worst lattice cell (1 ÷ the smallest cell Knudsen number). DSMC guidance: below 1, ideally ~1/3. Values above 1 mean coarser than a mean free path (the old-cell runs used ~4–8 at 17 SCCM; extraction agreed with a 2x finer lattice). Separately, the chamber density is ~0.67–0.73x the molecular-flow aperture law n = 4Q/(c̄·A_eff) here, as in the old cell.",
+  hl: "How fine the DSMC lattice is: lattice spacing ÷ neon mean free path (λ), from the chamber-average density and temperature; in parentheses the worst spot in the domain. Lower is finer. Above 1, one lattice spacing spans several mean free paths, so the simulation mixes collision partners over a distance the gas itself doesn't, which smooths gradients (DSMC guidance: below 1, ideally ~1/3). The old-cell runs used ~4–8 at 17 SCCM, and extraction agreed with a 2x finer lattice. Separately, the chamber density is ~0.67–0.73x the molecular-flow aperture law n = 4Q/(c̄·A_eff) here, as in the old cell.",
   traced: "Beam energies traced so far for this flow.",
   best: "Highest thermalized (extracted) % over the energies traced so far, and the energy where it occurs.",
   E: "BaF⁺ beam energy at injection (lab frame), on axis at the inlet aperture.",
@@ -116,7 +116,7 @@ function render(key) {
   document.getElementById("meta").textContent =
     `Updated ${m.updated} · jobs running ${m.running}, queued ${m.queued} · runs traced ${c.traced} of ${10 * c.nen} · /ceph use ${m.ceph}`;
   tbl.innerHTML = `<thead><tr>${th("flow","Flow")}${th("neon","Neon DSMC")}${th("lattice","Lattice")}${th("rule","Grid rule")}` +
-    `${th("n","Chamber n (m⁻³)")}${th("hl","Cell / mean free path")}${th("traced","Energies traced")}${th("best","Best thermalized (extracted)")}</tr></thead><tbody></tbody>`;
+    `${th("n","Chamber n (m⁻³)")}${th("hl","Lattice / mean free path")}${th("traced","Energies traced")}${th("best","Best thermalized (extracted)")}</tr></thead><tbody></tbody>`;
   const body = tbl.tBodies[0];
   for (const fl of c.flows) {
     const tr = document.createElement("tr");
