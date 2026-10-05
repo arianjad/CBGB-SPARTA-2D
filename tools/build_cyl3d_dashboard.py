@@ -3,20 +3,24 @@
 
   results/dashboard/site/index.html     the page; all run data embedded as JSON
   results/dashboard/site/fig/*.png      scan figures (tools/plot_cyl3d_scan.py)
-  results/dashboard/site/run/F_E.png    per-run figure: dE/dx vs depth, stopping-depth
-                                        histogram, exit-energy histogram
+  results/dashboard/site/run/png_F.json per-run figures of one flow (dE/dx vs depth,
+                                        stopping-depth and exit-energy histograms) as
+                                        {energy: PNG data URI}; packed because an artifact
+                                        version holds at most 511 files. The PNGs
+                                        themselves are cached in results/dashboard/runpng.
   results/dashboard/site/run/F_E.gif    trajectory GIF, downscaled to 560 px wide
 
 The page lists one row per flow; a click expands it into its energies, and a click
 on an energy shows that run's GIF, figure and numbers. Images are separate files so
 the page stays small; only new or changed files need re-uploading:
-results/dashboard/site/to_publish.json lists them (published path -> local path).
-After a successful publish run with --mark-published to record them.
+results/dashboard/site/to_publish.json lists them (published path -> local path, or null for a published
+file that is gone and should be removed). After a successful publish run with --mark-published to record them.
 
 Light work (small CSVs, incremental image conversion), fine on the login node.
 Usage: python tools/build_cyl3d_dashboard.py [--runbase cyl-scan] [--cond table-central] [--mark-published]
 """
 import argparse
+import base64
 import datetime
 import glob
 import hashlib
@@ -33,6 +37,7 @@ from tracer_classify3d import CYL_BOX, CYL_OUTLET_X, CYL_PORTS_OUTLET_X, classif
 
 BASE = os.path.expanduser("~/orcd/scratch/cbgb-sparta-3d")
 SITE = "results/dashboard/site"
+PNGCACHE = "results/dashboard/runpng"   # per-run PNGs, packed into SITE/<run>/png_F.json
 FLOWS = [5, 10, 15, 20, 25, 30, 35, 40, 45, 50]
 # port configurations (gen_cyl3d.py --config); the first is shown when the page loads
 CONFIGS = [
@@ -270,7 +275,10 @@ def main():
     if a.mark_published:
         todo = json.load(open(f"{SITE}/to_publish.json"))
         for k, v in todo.items():
-            manifest[k] = fhash(v)
+            if v is None:
+                manifest.pop(k, None)
+            else:
+                manifest[k] = fhash(v)
         json.dump(manifest, open(manifest_p, "w"), indent=0)
         print(f"marked {len(todo)} files published"); return
 
@@ -282,27 +290,34 @@ def main():
             jobs[p[0]] = p[1]
     cfgs = []
     for c in CONFIGS:
-        os.makedirs(f"{SITE}/{c['run']}", exist_ok=True)
+        os.makedirs(f"{SITE}/{c['run']}", exist_ok=True); os.makedirs(f"{PNGCACHE}/{c['run']}", exist_ok=True)
         flows = []
         for f in FLOWS:
             row = flow_row(f, c["runbase"], jobs, c["job"])
             d = f"{BASE}/{c['runbase']}/sccm{f}"
+            pack = {}
             Es = sorted({int(re.search(r"-e(\d+)_s", p).group(1)) for p in glob.glob(f"{d}/post/tracer_{a.cond}-e*_s*.out")})
             for E in Es:
                 res = run_stats(d, a.cond, E, c["outlet"])
                 if res is None:
                     continue
                 st, r, tr, ke = res
-                png = f"{SITE}/{c['run']}/{f}_{E}.png"
+                png = f"{PNGCACHE}/{c['run']}/{f}_{E}.png"
                 if not os.path.exists(png):
                     run_figure(d, a.cond, E, f, r, tr, ke, png)
-                st["png"] = f"{c['run']}/{f}_{E}.png"
+                pack[str(E)] = "data:image/png;base64," + base64.b64encode(open(png, "rb").read()).decode()
+                st["pack"] = f"{c['run']}/png_{f}.json"
                 src = f"{d}/post/gif/sccm{f}_{a.cond}_e{E}.gif"
                 gif = f"{SITE}/{c['run']}/{f}_{E}.gif"
                 if os.path.exists(src) and (a.redo_gifs or not os.path.exists(gif)):
                     small_gif(src, gif)
                 st["gif"] = f"{c['run']}/{f}_{E}.gif" if os.path.exists(gif) else None
                 row["runs"].append(st)
+            pp = f"{SITE}/{c['run']}/png_{f}.json"
+            if pack:
+                txt = json.dumps(pack, sort_keys=True)
+                if not os.path.exists(pp) or open(pp).read() != txt:
+                    open(pp, "w").write(txt)
             th = [(x["therm"][0], x["E"]) for x in row["runs"] if x["therm"][0] is not None]
             row["best"] = max(th) if th else None
             sp = f"{SITE}/{c['run']}/flow_{f}.png"
@@ -350,10 +365,16 @@ def main():
         rel = os.path.relpath(p, SITE)
         if manifest.get(rel) != fhash(p):
             todo[rel] = p
+    for rel in manifest:
+        if not os.path.exists(f"{SITE}/{rel}"):
+            todo[rel] = None
     json.dump(todo, open(f"{SITE}/to_publish.json", "w"), indent=0)
     size = sum(os.path.getsize(p) for p in glob.glob(f"{SITE}/fig/*") + glob.glob(f"{SITE}/run/*.*") + glob.glob(f"{SITE}/run/*/*.*"))
     runs = ", ".join(f"{c['key']} {c['traced']}" for c in cfgs)
-    print(f"wrote {SITE}/index.html; runs {runs}; {len(todo)} files to publish; site files {size/1e6:.0f} MB")
+    nfiles = len(glob.glob(f"{SITE}/fig/*") + glob.glob(f"{SITE}/run/*.*") + glob.glob(f"{SITE}/run/*/*.*")) + 1
+    nrm = sum(v is None for v in todo.values())
+    print(f"wrote {SITE}/index.html; runs {runs}; {len(todo) - nrm} files to publish, {nrm} to remove; "
+          f"site {nfiles} files, {size/1e6:.0f} MB")
 
 
 if __name__ == "__main__":

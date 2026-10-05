@@ -206,7 +206,15 @@ function buildDetail(fl, r, cell) {
     `<dt>Median exit KE</dt><dd>${r.ke_med_eV != null ? r.ke_med_eV + " eV" : "–"}</dd>` +
     `<dt>Median transit</dt><dd>${r.t_med_ms != null ? r.t_med_ms.toFixed(2) + " ms" : "–"}</dd>` +
     `<dt>Neon chamber n</dt><dd>${esc(fl.n) || "–"} m⁻³</dd></dl>` +
-    `<figure class="full"><img src="${esc(r.png)}" alt="Energy loss vs depth, stopping-depth and exit-energy histograms" loading="lazy"></figure></div>`;
+    `<figure class="full"><img class="runfig" alt="Energy loss vs depth, stopping-depth and exit-energy histograms"></figure></div>`;
+  if (r.pack) packImg(r.pack, String(r.E), cell.querySelector("img.runfig"));
+}
+
+// Per-run figures come packed one JSON file per flow ({energy: PNG data URI}),
+// fetched once on first use.
+const PACKS = {};
+function packImg(path, key, img) {
+  (PACKS[path] ||= fetch(path).then(res => res.json())).then(p => { if (p[key]) img.src = p[key]; }).catch(() => {});
 }
 
 render(DATA.configs[0].key);
