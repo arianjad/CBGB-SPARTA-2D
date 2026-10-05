@@ -44,6 +44,12 @@ RUNDIR="$HOME/orcd/scratch/cbgb-sparta-3d/${RUNBASE:-$RUNBASE_DEF}/sccm$SCCM"
 cd "$RUNDIR/post" || exit 2
 [ -f frozen.grid ] || { echo "no frozen.grid -- run sbatch_cyl3d_post.sh first"; exit 2; }
 JULIA="$SLURM_SUBMIT_DIR/.local/julia-1.9.4/bin/julia"
+# Per-CPU-type Julia compile cache. The shared ~/.julia/compiled lives on NFS; a job
+# on a new CPU type rewrites its .so files in place, and running jobs on other nodes
+# that have them memory-mapped then die with SIGBUS ("Bus error", rc 135) hours later
+# (2026-10-04: two 30/40 SCCM tracer jobs). New caches now go to a depot per CPU model.
+CPUKEY=$(grep -m1 "model name" /proc/cpuinfo | md5sum | cut -c1-8)
+export JULIA_DEPOT_PATH="$HOME/.julia_bycpu/$CPUKEY:$HOME/.julia"
 fail=0
 for E in $ENERGIES; do
   tag="tracer_${COND}-e${E}_s$SEED"
