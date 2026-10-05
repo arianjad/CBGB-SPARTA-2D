@@ -181,7 +181,18 @@ def flow_row(f, runbase, jobs, jobpfx):
         tot = re.findall(r"TOTAL=(\d+)", log)
         if steps and tot:
             prog = f"{int(steps[-1])/int(tot[-1])*100:.0f}%"
-    return dict(f=f, neon=neon, prog=prog, lattice=m.group(1) if m else "",
+    # lattice cell size in mean free paths: chamber average (from <n>, <T> and the run's ne.vss,
+    # VHS mean free path as in SPARTA's compute lambda/grid) and the worst cell (1 / min cell Kn)
+    hl_ch = hl_max = None
+    mk = re.search(r"Kn_cell: min ([\d.e+-]+)", rule)
+    if mk and float(mk.group(1)) > 0:
+        hl_max = round(1 / float(mk.group(1)), 2)
+    mt = re.search(r"chamber <T> ([\d.]+) K", rule)
+    if mr and m and mt and os.path.exists(f"{d}/ne.vss"):
+        dd, w, tref = [float(x) for x in next(l for l in open(f"{d}/ne.vss") if l.split() and l.split()[0] == "Ne").split()[1:4]]
+        lam = 1 / (np.pi * np.sqrt(2) * dd**2 * float(mr.group(1)) * (tref / float(mt.group(1)))**(w - 0.5))
+        hl_ch = round(float(m.group(1)) * 1e-3 / lam, 2)
+    return dict(f=f, neon=neon, prog=prog, lattice=m.group(1) if m else "", hl_ch=hl_ch, hl_max=hl_max,
                 lattices=" / ".join(x for x in sizes.group(1).split() if x != "1.6") if sizes else "",
                 rule="pass" if "SATISFIED" in rule else ("fail" if "VIOLATED" in rule else ""),
                 n=mr.group(1) if mr else "", ratio=mr.group(3) if mr else "", runs=[])

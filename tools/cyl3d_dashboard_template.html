@@ -79,7 +79,7 @@ const TIP = {
   lattice: "DSMC lattice spacing in the chamber (mm), and in parentheses any finer spacings the run added where the gas was dense.",
   rule: "Post-run check on the averaged field: the time step shorter than the local mean collision time in every lattice cell (and, for the 5 mm configuration, every cell at most 2 mean free paths). Wall-cut slivers are skipped.",
   n: "Volume-averaged neon number density in the chamber (m⁻³), from the averaged field.",
-  ratio: "Simulated chamber density ÷ the simple molecular-flow prediction n = 4Q/(c̄·A_eff): inflow Q (atoms/s) balanced by atoms leaking out of the ports one at a time (c̄ = 155 m/s mean speed of 23 K neon; A_eff = port area × fraction that gets through each channel). 1 = gas behaves as that simple picture; below 1 = gas streams out of the ports faster than simple leakage (collisions in the ports), so the chamber holds less. The old CAD cell measured ~0.72.",
+  hl: "How fine the lattice is: lattice cell size ÷ neon mean free path (λ), from the chamber-average density and temperature, and in parentheses the worst lattice cell (1 ÷ the smallest cell Knudsen number). DSMC guidance: below 1, ideally ~1/3. Values above 1 mean coarser than a mean free path (the old-cell runs used ~4–8 at 17 SCCM; extraction agreed with a 2x finer lattice). Separately, the chamber density is ~0.67–0.73x the molecular-flow aperture law n = 4Q/(c̄·A_eff) here, as in the old cell.",
   traced: "Beam energies traced so far for this flow.",
   best: "Highest thermalized (extracted) % over the energies traced so far, and the energy where it occurs.",
   E: "BaF⁺ beam energy at injection (lab frame), on axis at the inlet aperture.",
@@ -116,7 +116,7 @@ function render(key) {
   document.getElementById("meta").textContent =
     `Updated ${m.updated} · jobs running ${m.running}, queued ${m.queued} · runs traced ${c.traced} of ${10 * c.nen} · /ceph use ${m.ceph}`;
   tbl.innerHTML = `<thead><tr>${th("flow","Flow")}${th("neon","Neon DSMC")}${th("lattice","Lattice")}${th("rule","Grid rule")}` +
-    `${th("n","Chamber n (m⁻³)")}${th("ratio","vs aperture law")}${th("traced","Energies traced")}${th("best","Best thermalized (extracted)")}</tr></thead><tbody></tbody>`;
+    `${th("n","Chamber n (m⁻³)")}${th("hl","Cell / mean free path")}${th("traced","Energies traced")}${th("best","Best thermalized (extracted)")}</tr></thead><tbody></tbody>`;
   const body = tbl.tBodies[0];
   for (const fl of c.flows) {
     const tr = document.createElement("tr");
@@ -126,7 +126,7 @@ function render(key) {
       `<td><span class="chip ${esc(fl.neon)}">${esc(fl.neon)}${fl.prog ? " " + esc(fl.prog) : ""}</span></td>` +
       `<td class="num">${fl.lattice ? esc(fl.lattice) + " mm" : ""}${fl.lattices && fl.lattices.split(" / ").length > 1 ? `<span class="meta"> (${esc(fl.lattices)})</span>` : ""}</td>` +
       `<td>${fl.rule ? `<span class="chip ${fl.rule}">${fl.rule}</span>` : ""}</td>` +
-      `<td class="num">${esc(fl.n)}</td><td class="num">${fl.ratio ? esc(fl.ratio) + "×" : ""}</td>` +
+      `<td class="num">${esc(fl.n)}</td><td class="num">${fl.hl_ch != null ? fl.hl_ch.toFixed(1) : ""}${fl.hl_max != null ? `<span class="meta"> (max ${fl.hl_max.toFixed(1)})</span>` : ""}</td>` +
       `<td><span class="bar"><i style="width:${p}%"></i></span><span class="meta">${fl.runs.length}/${NEN}</span></td>` +
       `<td class="num">${fl.best ? `${fl.best[0].toFixed(1)}% at ${fl.best[1] / 1000} keV` : "–"}</td>`;
     const sub = document.createElement("tr");
