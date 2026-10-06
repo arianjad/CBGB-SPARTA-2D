@@ -359,17 +359,28 @@ def main():
                          total=len(c["flows"]) * c["nen"],
                          flows=flows, figs=figs, traced=sum(len(x["runs"]) for x in flows)))
     common = []
-    xs = "results/figures/cross_sections.png"     # tools/plot_cross_sections.py
-    if os.path.exists(xs):
-        dst = f"{SITE}/fig/cross_sections.png"
-        if not os.path.exists(dst) or fhash(dst) != fhash(xs):
-            with open(xs, "rb") as fi, open(dst, "wb") as fo:
-                fo.write(fi.read())
-            os.utime(dst, (os.stat(xs).st_atime, os.stat(xs).st_mtime))
-        common.append(dict(src="fig/cross_sections.png",
-                         cap="Cross sections. Left: BaF⁺–Ne vs beam energy: old 1/v model with its floor vs the computed "
-                             "table now used. Right: Ne–Ne through the viscosity it implies: Bird's room-temperature "
-                             "parameters (old runs) vs ab initio values and the new fit (cylinder runs)."))
+    # cross-section figure per gas (tools/plot_cross_sections.py [--gas he]), shown on that gas's tab
+    XS = {"Ne": ("cross_sections.png",
+                 "Cross sections. Left: BaF⁺–Ne vs beam energy: old 1/v model with its floor vs the computed "
+                 "table now used. Right: Ne–Ne through the viscosity it implies: Bird's room-temperature "
+                 "parameters (old runs) vs ab initio values and the new fit (cylinder runs)."),
+          "He": ("cross_sections_he.png",
+                 "Cross sections. Left: BaF⁺–He vs beam energy at 4 K: the computed table used for the helium runs "
+                 "(Ba⁺–He ab initio proxy, quantum below 150 K; band = soft/stiff inner wall) vs the old 1/v model and "
+                 "the Langevin limit. Right: He–He through the viscosity it implies: NIST dilute-gas values, the "
+                 "2.2–10 K fit used here, Bird's 273 K set and the repo's older set (1.6x too viscous at 4 K).")}
+    xsfig = {}
+    for gas, (fn, cap) in XS.items():
+        src = f"results/figures/{fn}"
+        if os.path.exists(src):
+            dst = f"{SITE}/fig/{fn}"
+            if not os.path.exists(dst) or fhash(dst) != fhash(src):
+                with open(src, "rb") as fi, open(dst, "wb") as fo:
+                    fo.write(fi.read())
+                os.utime(dst, (os.stat(src).st_atime, os.stat(src).st_mtime))
+            xsfig[gas] = [dict(src=f"fig/{fn}", cap=cap)]
+    for c in cfgs:
+        c["common"] = xsfig.get(c["gas"], [])
     ceph = sh("getfattr -n ceph.dir.rbytes --only-values /ceph/submit/data/user/h/$USER 2>/dev/null").strip()
     meta = dict(updated=datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
                 running=sum(v == "RUNNING" for v in jobs.values()), queued=sum(v == "PENDING" for v in jobs.values()),

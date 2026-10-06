@@ -166,7 +166,7 @@ function render(key) {
     tr.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } });
   }
   const figs = document.getElementById("figs");
-  const all = c.figs.concat(DATA.common);
+  const all = c.figs.concat(c.common || []);
   figs.className = "figs";
   figs.innerHTML = (c.figs.length ? "" : `<p class="empty panel">No tracer results yet for this configuration. Figures appear here as flows finish.</p>`) +
     all.map(f => `<figure class="panel"><img src="${esc(f.src)}" alt="${esc(f.cap)}"><figcaption>${esc(f.cap)}</figcaption></figure>`).join("");
