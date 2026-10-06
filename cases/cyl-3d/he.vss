@@ -1,0 +1,11 @@
+# VSS helium-4 for 2-10 K: species-ID diameter(m) omega tref(K) alpha.
+# Fitted (least squares in ln eta, uniform in ln T over 2.2-10 K, omega 0.91) to the
+# dilute-gas viscosity of He-4 from the NIST Chemistry WebBook fluid properties
+# (p = 1e-4 bar; eta(4.18 K) = 1.064 uPa s, eta(4 K) = 1.02 uPa s), with d set so
+# eta(4 K) is exact. Deviation within +9% over 2.2-10 K (+2% at 3 K, +1% at 6 K; +25% at 20 K).
+# alpha = 1.26 (Bird's helium value; NIST does not give the Schmidt number).
+# The repo's older cases/data/he.vss (273 K hard-sphere-like set) gives 1.68 uPa s
+# at 4 K, 1.6x too high.
+# Fit: tools/cross_section/he_vss_fit.py
+
+He  3.855e-10  0.91  4.0  1.26

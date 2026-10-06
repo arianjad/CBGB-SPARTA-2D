@@ -19,7 +19,7 @@ import math
 import numpy as np
 import pandas as pd
 
-KB, M = 1.380649e-23, 20.1797 * 1.66053907e-27
+KB = 1.380649e-23
 SCCM = 4.4615e17                         # molecules/s per SCCM
 
 
@@ -34,8 +34,13 @@ def main():
     ap.add_argument("--aeff-mm2", type=float, default=2 * math.pi * 2.5**2,
                     help="port area for the aperture law, Clausing-weighted (default: two thin 5 mm apertures)")
     ap.add_argument("--knmin", type=float, default=0.5, help="cell <= lambda / KNMIN (0.5: up to 2 mean free paths)")
+    ap.add_argument("--sid", default="Ne", help="species ID in the VSS file (Ne, He)")
+    ap.add_argument("--mgas", type=float, default=20.1797, help="gas atomic mass (u)")
+    ap.add_argument("--tgas", type=float, default=23.0, help="wall/inflow gas temperature (K), for the aperture law")
+    ap.add_argument("--tfloor", type=float, default=3.0, help="floor on the sampled T (K), as TFLOOR in in.ne_cyl3d_run")
     a = ap.parse_args()
-    d, w, tref = [float(x) for x in next(l for l in open(a.vss) if l.split() and l.split()[0] == "Ne").split()[1:4]]
+    M = a.mgas * 1.66053907e-27
+    d, w, tref = [float(x) for x in next(l for l in open(a.vss) if l.split() and l.split()[0] == a.sid).split()[1:4]]
     v = pd.read_csv(a.frozen, sep=" ", header=None, skiprows=9, usecols=range(15), engine="c").values
     xc, yc, zc = v[:, 1], v[:, 2], v[:, 3]
     size = (v[:, 7:10] - v[:, 4:7]).mean(axis=1)
@@ -47,7 +52,7 @@ def main():
         f = np.array([frac.get(int(i), 1.0) for i in v[:, 0]])
         print(f"skipping {(gas & (f < a.fmin)).sum()} wall-cut cells with gas fraction < {a.fmin}")
         gas &= f >= a.fmin
-    T = np.maximum(T, 3.0)   # same 3 K floor as in.ne_cyl3d_run (TFLOOR): nearly empty cells sample T ~ 0
+    T = np.maximum(T, a.tfloor)   # same floor as in.ne_cyl3d_run (TFLOOR): nearly empty cells sample T ~ 0
     lam = 1 / (math.pi * math.sqrt(2) * d**2 * n[gas] * (tref / T[gas])**(w - 0.5))
     tau = 1 / (2 * d**2 * n[gas] * math.sqrt(2 * math.pi * KB * tref / (M / 2)) * (T[gas] / tref)**(1 - w))
     kn = lam / size[gas]
@@ -64,7 +69,7 @@ def main():
     ch = gas & (xc > 0) & (xc < 0.04547) & (yc**2 + zc**2 < 0.01524**2)
     vol = np.prod(v[:, 7:10] - v[:, 4:7], axis=1)
     nch = (n * vol)[ch].sum() / vol[ch].sum()
-    cbar = math.sqrt(8 * KB * 23.0 / (math.pi * M))
+    cbar = math.sqrt(8 * KB * a.tgas / (math.pi * M))
     neq2 = 4 * a.sccm * SCCM / (cbar * a.aeff_mm2 * 1e-6)
     print(f"chamber <n> {nch:.3e} m^-3 vs aperture law (eq. 2) {neq2:.3e} ({nch/neq2:.2f}x); "
           f"chamber <T> {(n*vol*T)[ch].sum()/(n*vol)[ch].sum():.1f} K")

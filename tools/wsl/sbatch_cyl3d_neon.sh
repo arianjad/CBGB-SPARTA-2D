@@ -39,14 +39,15 @@ CASEDIR=cases/cyl-3d
 RUNDIR="$HOME/orcd/scratch/cbgb-sparta-3d/$RUNBASE/sccm$SCCM"
 mkdir -p "$RUNDIR"
 cp -n "$CASEDIR"/in.ne_cyl3d_run "$CASEDIR"/in.ne_cyl3d_resume "$CASEDIR"/$SURF \
-      "$CASEDIR"/ne.species "$CASEDIR"/ne.vss "$RUNDIR/"
+      "$CASEDIR"/$SPECIESF "$CASEDIR"/$VSSF "$RUNDIR/"
+GASVARS="-var SID $SID -var SPECIESF $SPECIESF -var VSSF $VSSF -var TGAS $TGAS -var TFLOOR $TFLOOR"   # gas from CONFIG
 cd "$RUNDIR"
 SPA="$HOME/opt/sparta-27Aug2026/bin/spa_mpi"
 
 if [ -n "${STEPS:-}" ]; then   # smoke test: windows of STEPS steps; loose TOL forces the steady path after 2, then 1 averaging window
   echo "SMOKE SCCM=$SCCM MDOT=$MDOT FILLN=$FILLN FNUM=$FNUM DT=$DT REFINE=$REFINE ADAPT_STEPS=$ADAPT_STEPS STEPS=$STEPS NP=$SLURM_NTASKS" | tee -a scan.log
   mpirun -np "$SLURM_NTASKS" "$SPA" -in in.ne_cyl3d_run -var MDOT $MDOT -var FILLN $FILLN -var FNUM $FNUM \
-    -var DT $DT -var REFINE $REFINE -var ADAPT_STEPS $ADAPT_STEPS -var NADAPT $NADAPT -var KNMIN $KN -var SURF $SURF -var XOUT $XOUT \
+    -var DT $DT -var REFINE $REFINE -var ADAPT_STEPS $ADAPT_STEPS -var NADAPT $NADAPT -var KNMIN $KN -var SURF $SURF -var XOUT $XOUT $GASVARS \
     -var DUMPFREQ $STEPS -var CHECKPOINT_STEPS $STEPS -var MAXWIN 3 -var MINWIN 2 -var TOL 2 -var NDUMPWIN 1 &> run.log
   rc=$?; grep -h "^ADAPT\|^STRICT RULE" log.sparta | tee -a scan.log
   grep -q "^STRICT RULE VIOLATED" log.sparta && rc=3
@@ -96,7 +97,7 @@ echo "CONFIG=$CONFIG SCCM=$SCCM MDOT=$MDOT FILLN=$FILLN FNUM=$FNUM DT=$DT REFINE
 COMMON="-var MDOT $MDOT -var FILLN $FILLN -var FNUM $FNUM -var DT $DT \
         -var DUMPFREQ $WINDOW -var CHECKPOINT_STEPS $WINDOW -var MAXWIN $MAXWIN -var MINWIN $MINWIN \
         -var NDUMPWIN $NDUMPWIN -var STEADYDONE $STEADYDONE -var TOL ${TOL:-0.005} \
-        -var IW0 $IW0 -var P1 $P1 -var P2 $P2"
+        -var IW0 $IW0 -var P1 $P1 -var P2 $P2 $GASVARS"
 if [ "$LAST" -eq 0 ]; then
   # (a run killed during the short adaptation phase just starts over)
   echo "$(date) job $SLURM_JOB_ID: fresh start (adapt, then up to $MAXWIN windows to steady state + $NDUMPWIN averaging)" | tee -a scan.log

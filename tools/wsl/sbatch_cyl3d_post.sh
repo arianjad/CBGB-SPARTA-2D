@@ -34,5 +34,5 @@ grep "=== chamber" "$OUT/freeze.log" > "$OUT/chamber.txt"
 cp -n "$RUNDIR/$SURF" "$OUT/"
 cat "$OUT/freeze.log"
 [ "$rc" -eq 0 ] || exit $rc
-python tools/cyl3d_check_rule.py "$OUT/frozen.grid" --vss "$RUNDIR/ne.vss" --dt "$DT" --sccm "$SCCM" --cellfrac "$RUNDIR/cellfrac.grid" --knmin "$KN" --aeff-mm2 "$AEFF_MM2" | tee "$OUT/rule_check.txt"
+python tools/cyl3d_check_rule.py "$OUT/frozen.grid" --vss "$RUNDIR/$VSSF" --sid "$SID" --mgas "$MGAS_U" --tgas "$TGAS" --tfloor "$TFLOOR" --dt "$DT" --sccm "$SCCM" --cellfrac "$RUNDIR/cellfrac.grid" --knmin "$KN" --aeff-mm2 "$AEFF_MM2" | tee "$OUT/rule_check.txt"
 exit ${PIPESTATUS[0]}

@@ -84,15 +84,17 @@ def grids(rows, col):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--config", choices=["ports", "ap5"], default="ports")
+    ap.add_argument("--config", choices=["ports", "ap5", "ports-he"], default="ports")
     ap.add_argument("--runbase", default=None, help="default cyl-ports (ports) / cyl-scan (ap5)")
     ap.add_argument("--cond", default="table-central")
     ap.add_argument("--out", default=None, help="default results/figures/cyl3d_ports / cyl3d_scan")
     a = ap.parse_args()
     global OUTLET_X
-    OUTLET_X = CYL_PORTS_OUTLET_X if a.config == "ports" else CYL_OUTLET_X
-    a.runbase = a.runbase or ("cyl-ports" if a.config == "ports" else "cyl-scan")
-    a.out = a.out or ("results/figures/cyl3d_ports" if a.config == "ports" else "results/figures/cyl3d_scan")
+    OUTLET_X = CYL_OUTLET_X if a.config == "ap5" else CYL_PORTS_OUTLET_X
+    a.runbase = a.runbase or {"ports": "cyl-ports", "ap5": "cyl-scan", "ports-he": "cyl-ports-he"}[a.config]
+    a.out = a.out or {"ports": "results/figures/cyl3d_ports", "ap5": "results/figures/cyl3d_scan",
+                      "ports-he": "results/figures/cyl3d_ports-he"}[a.config]
+    a.gas = "He" if a.config == "ports-he" else "Ne"
     rows = collect(a.runbase, a.cond)
     if not rows:
         sys.exit("no tracer outputs found")
@@ -123,11 +125,12 @@ def main():
             ax = fig.add_subplot(1, 2, i, projection="3d")
             ax.plot_surface(X, Y, np.ma.masked_invalid(Z), cmap=SEQ, vmin=0, vmax=zmax,
                             edgecolor="white", linewidth=0.3, antialiased=True)
-            ax.set_xlabel("Ne flow (SCCM)", color=INK); ax.set_ylabel("BaF⁺ energy (keV)", color=INK)
+            ax.set_xlabel(f"{a.gas} flow (SCCM)", color=INK); ax.set_ylabel("BaF⁺ energy (keV)", color=INK)
             ax.set_zlabel(zl, color=INK); ax.set_zlim(0, zmax * 1.05)
             ax.set_title(title, color=INK, fontsize=11)
             ax.view_init(elev=28, azim=-130)
-        ports = "old-cell ports" if a.config == "ports" else "5 mm apertures"
+        ports = "5 mm apertures" if a.config == "ap5" else "old-cell ports"
+        ports += ", 4 K helium" if a.gas == "He" else ", 23 K neon"
         fig.suptitle(f"BaF⁺ extraction, plain cylinder (30.5 mm bore, 45.5 mm long, {ports}), "
                      f"σ {a.cond}", color=INK, fontsize=12)
         fig.tight_layout(); fig.savefig(a.out + "_surface.png", dpi=150); plt.close(fig)
@@ -139,7 +142,7 @@ def main():
         F, E, Z = grids(rows, col)
         im = ax.imshow(Z, origin="lower", aspect="auto", cmap=SEQ, vmin=0, vmax=zmax)
         ax.set_xticks(range(len(F)), [str(f) for f in F]); ax.set_yticks(range(len(E)), [str(e) for e in E])
-        ax.set_xlabel("Ne flow (SCCM)", color=INK); ax.set_ylabel("BaF⁺ energy (eV)", color=INK)
+        ax.set_xlabel(f"{a.gas} flow (SCCM)", color=INK); ax.set_ylabel("BaF⁺ energy (eV)", color=INK)
         ax.set_title(title, color=INK, fontsize=11)
         for (j, i), z in np.ndenumerate(Z):
             if np.isfinite(z):
@@ -163,7 +166,9 @@ def plot_diagnostics(a, flows):
     if have:
         f = have[len(have) // 2]
         fig, ax = plt.subplots(figsize=(7.5, 4.2))
-        for k, E in enumerate([1000, 2000, 3000, 4000, 5000]):
+        avail = sorted({int(re.search(r"-e(\d+)_s", q).group(1)) for q in
+                        glob.glob(f"{BASE}/{a.runbase}/sccm{f}/post/tracer_{a.cond}-e*_s*_xr.csv")} & (set(range(1000, 5001, 1000)) if a.gas == "Ne" else set(range(500, 5001, 500))))
+        for k, E in enumerate(avail[:: max(1, len(avail) // 5)][:5]):
             paths = _tagfiles(a.runbase, f, a.cond, E, "_xr.csv")
             if not paths:
                 continue
@@ -183,7 +188,7 @@ def plot_diagnostics(a, flows):
         ax.set_xlim(-2, 52); ax.set_xlabel("depth x from the inlet wall (mm)", color=INK)
         ax.set_ylabel("dE/dx per ion (eV/mm, 1 mm bins)", color=INK)
         ax.legend(fontsize=8, frameon=False, title="beam energy", title_fontsize=8)
-        ax.set_title(f"BaF⁺ energy loss vs depth, {f} SCCM Ne (shaded: inlet wall; dotted: outlet wall, inner face)",
+        ax.set_title(f"BaF⁺ energy loss vs depth, {f} SCCM {a.gas} (shaded: inlet wall; dotted: outlet wall, inner face)",
                      color=INK, fontsize=10)
         ax.grid(alpha=0.25)
         fig.tight_layout(); fig.savefig(a.out + "_dedx.png", dpi=150); plt.close(fig)

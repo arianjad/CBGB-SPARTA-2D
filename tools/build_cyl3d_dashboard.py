@@ -41,16 +41,32 @@ PNGCACHE = "results/dashboard/runpng"   # per-run PNGs, packed into SITE/<run>/p
 FLOWS = [5, 10, 15, 20, 25, 30, 35, 40, 45, 50]
 # port configurations (gen_cyl3d.py --config); the first is shown when the page loads
 CONFIGS = [
-    dict(key="ports", label="Old-cell ports",
+    dict(key="ports", label="Old-cell ports", tab="Ne cylinder", gas="Ne", gasname="neon", sid="Ne", vss="ne.vss", mgas=20.1797, flows=FLOWS,
+         title="BaF⁺ extraction from a plain cylindrical neon cell",
+         sub="30.5 mm bore × 45.5 mm chamber, 23 K neon at 5–50 SCCM; BaF⁺ injected on axis at the inlet port "
+             "(computed BaF⁺–Ne cross-section table).",
          desc="2.54 mm inlet through a 1.27 mm wall, 3.175 mm outlet through a 5.33 mm channel (the fluor-cell-3d ports). "
               "Fixed 0.4 mm DSMC lattice; time step below the local collision time everywhere.",
          runbase="cyl-ports", job="ports", fig="results/figures/cyl3d_ports", run="run/ports", outlet=CYL_PORTS_OUTLET_X,
          nen=20, energies="0.25–5 keV in 250 eV steps"),
-    dict(key="ap5", label="5 mm apertures",
+    dict(key="ap5", label="5 mm apertures", tab="Ne cylinder", gas="Ne", gasname="neon", sid="Ne", vss="ne.vss", mgas=20.1797, flows=FLOWS,
+         title="BaF⁺ extraction from a plain cylindrical neon cell",
+         sub="30.5 mm bore × 45.5 mm chamber, 23 K neon at 5–50 SCCM; BaF⁺ injected on axis at the inlet port "
+             "(computed BaF⁺–Ne cross-section table).",
          desc="5 mm apertures through 1.27 mm plates (stopped 2026-10-03 after 5–15 SCCM: the gas is ~5x thinner than the "
               "old cell at the same flow, so ions crossed without stopping). Lattice ≤ 2 mean free paths per flow.",
          runbase="cyl-scan", job="cyl", fig="results/figures/cyl3d_scan", run="run", outlet=CYL_OUTLET_X,
          nen=25, energies="0.2–5 keV in 200 eV steps"),
+    dict(key="ports-he", label="Old-cell ports", tab="He cylinder", gas="He", gasname="helium", sid="He", vss="he.vss",
+         mgas=4.002602, flows=[10, 20, 30, 40],
+         title="BaF⁺ extraction from a plain cylindrical helium cell",
+         sub="The same cylinder and ports with 4 K helium at 10–40 SCCM (same mean thermal speed as 23 K neon, so a "
+             "similar density per SCCM); BaF⁺ injected on axis at the inlet port (computed BaF⁺–He cross-section table).",
+         desc="Comparison points for the neon scan: same old-cell ports, fixed 0.4 mm DSMC lattice, time step below the "
+              "local collision time everywhere; He–He VSS fitted to the NIST viscosity at 2–10 K; tracer as in the neon "
+              "scan (no free-flight cap).",
+         runbase="cyl-ports-he", job="ports-he", fig="results/figures/cyl3d_ports-he", run="run/ports-he",
+         outlet=CYL_PORTS_OUTLET_X, nen=4, energies="0.5, 1, 2.5 and 5 keV"),
 ]
 AMU, EV = 1.66054e-27, 1.602177e-19
 GIF_W = 560
@@ -162,7 +178,7 @@ def small_gif(src, out):
     fr[0].save(out, save_all=True, append_images=fr[1:], duration=im.info.get("duration", 83), loop=0, optimize=True)
 
 
-def flow_row(f, runbase, jobs, jobpfx):
+def flow_row(f, runbase, jobs, jobpfx, sid="Ne", vss="ne.vss"):
     d = f"{BASE}/{runbase}/sccm{f}"
     log = open(f"{d}/scan.log").read() if os.path.exists(f"{d}/scan.log") else ""
     rule = open(f"{d}/post/rule_check.txt").read() if os.path.exists(f"{d}/post/rule_check.txt") else ""
@@ -193,8 +209,8 @@ def flow_row(f, runbase, jobs, jobpfx):
     if mk and float(mk.group(1)) > 0:
         hl_max = round(1 / float(mk.group(1)), 2)
     mt = re.search(r"chamber <T> ([\d.]+) K", rule)
-    if mr and m and mt and os.path.exists(f"{d}/ne.vss"):
-        dd, w, tref = [float(x) for x in next(l for l in open(f"{d}/ne.vss") if l.split() and l.split()[0] == "Ne").split()[1:4]]
+    if mr and m and mt and os.path.exists(f"{d}/{vss}"):
+        dd, w, tref = [float(x) for x in next(l for l in open(f"{d}/{vss}") if l.split() and l.split()[0] == sid).split()[1:4]]
         lam = 1 / (np.pi * np.sqrt(2) * dd**2 * float(mr.group(1)) * (tref / float(mt.group(1)))**(w - 0.5))
         hl_ch = round(float(m.group(1)) * 1e-3 / lam, 2)
     return dict(f=f, neon=neon, prog=prog, lattice=m.group(1) if m else "", hl_ch=hl_ch, hl_max=hl_max,
@@ -203,7 +219,7 @@ def flow_row(f, runbase, jobs, jobpfx):
                 n=mr.group(1) if mr else "", ratio=mr.group(3) if mr else "", runs=[])
 
 
-def steady_info(d, png, f, neon):
+def steady_info(d, png, f, neon, mgas=20.1797, gasname="neon"):
     """Steady-state diagnostics of one neon run: STEADY line from steady.txt, and a figure of the
     particle count and gas outflow / inflow vs simulated time from the run.log stats lines."""
     log = open(f"{d}/scan.log").read() if os.path.exists(f"{d}/scan.log") else ""
@@ -233,7 +249,7 @@ def steady_info(d, png, f, neon):
         return info
     a = np.array([rows[k] for k in sorted(rows)])
     t = a[:, 0] * par["DT"] * 1e3
-    inflow = par["MDOT"] / (20.1797 * 1.66053907e-27 * par["FNUM"]) * par["DT"]     # particles per step
+    inflow = par["MDOT"] / (mgas * 1.66053907e-27 * par["FNUM"]) * par["DT"]     # particles per step
     ratio = a[:, 7:13].sum(axis=1) / inflow
     info["ratio"] = round(float(ratio[-1]), 3)
     if not info["status"]:
@@ -252,7 +268,7 @@ def steady_info(d, png, f, neon):
             x.set_xlabel("simulated time (ms)"); x.grid(alpha=0.25)
             if info["t_ms"] is not None:
                 x.axvline(info["t_ms"], color=INK, lw=1, ls=":")
-        fig.suptitle(f"{f} SCCM neon: approach to steady state" + (" (dotted: steady)" if info["t_ms"] is not None else ""),
+        fig.suptitle(f"{f} SCCM {gasname}: approach to steady state" + (" (dotted: steady)" if info["t_ms"] is not None else ""),
                      fontsize=10)
         fig.tight_layout(); fig.savefig(png, dpi=90); plt.close(fig)
     info["png"] = png
@@ -292,8 +308,8 @@ def main():
     for c in CONFIGS:
         os.makedirs(f"{SITE}/{c['run']}", exist_ok=True); os.makedirs(f"{PNGCACHE}/{c['run']}", exist_ok=True)
         flows = []
-        for f in FLOWS:
-            row = flow_row(f, c["runbase"], jobs, c["job"])
+        for f in c["flows"]:
+            row = flow_row(f, c["runbase"], jobs, c["job"], c["sid"], c["vss"])
             d = f"{BASE}/{c['runbase']}/sccm{f}"
             pack = {}
             Es = sorted({int(re.search(r"-e(\d+)_s", p).group(1)) for p in glob.glob(f"{d}/post/tracer_{a.cond}-e*_s*.out")})
@@ -321,7 +337,7 @@ def main():
             th = [(x["therm"][0], x["E"]) for x in row["runs"] if x["therm"][0] is not None]
             row["best"] = max(th) if th else None
             sp = f"{SITE}/{c['run']}/flow_{f}.png"
-            row["steady"] = steady_info(d, sp, f, row["neon"])
+            row["steady"] = steady_info(d, sp, f, row["neon"], c["mgas"], c["gasname"])
             if row["steady"]["png"]:
                 row["steady"]["png"] = f"{c['run']}/flow_{f}.png"
             flows.append(row)
@@ -339,6 +355,8 @@ def main():
                     os.utime(dst, (os.stat(c["fig"] + suf).st_atime, os.stat(c["fig"] + suf).st_mtime))
                 figs.append(dict(src=f"fig/{base}{suf}", cap=cap))
         cfgs.append(dict(key=c["key"], label=c["label"], desc=c["desc"], nen=c["nen"], energies=c["energies"],
+                         tab=c["tab"], gas=c["gas"], gasname=c["gasname"], title=c["title"], sub=c["sub"],
+                         total=len(c["flows"]) * c["nen"],
                          flows=flows, figs=figs, traced=sum(len(x["runs"]) for x in flows)))
     common = []
     xs = "results/figures/cross_sections.png"     # tools/plot_cross_sections.py

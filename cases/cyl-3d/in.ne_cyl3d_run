@@ -30,6 +30,11 @@
 # block: run to steady state, then NDUMPWIN averaging windows).
 
 variable    SEED index 8675309
+# Gas (defaults: neon at 23 K; helium at 4 K: -var SID He -var SPECIESF he.species -var VSSF he.vss -var TGAS 4.0)
+variable    SID index Ne
+variable    SPECIESF index ne.species
+variable    VSSF index ne.vss
+variable    TGAS index 23.0
 variable    SURF index cell_cyl3d.surf   # gen_cyl3d.py --config ap5 (cell_cyl3d.surf) or ports (cell_cyl3d_ports.surf)
 variable    XOUT index 0.04674           # outlet face x (m): 0.04674 ap5, 0.050804 ports
 variable    XCH equal ${XOUT}+0.0016
@@ -52,13 +57,13 @@ region      CAV  union 3 CH PIN POUT
 create_grid 63 32 32 levels 2 region 2 CAV ${REFINE} ${REFINE} ${REFINE} inside any
 balance_grid rcb cell
 global      mem/limit 1900
-species     ne.species Ne
-mixture     negas Ne nrho 1.0e22 temp 23.0
-mixture     fillgas Ne nrho ${FILLN} temp 23.0
+species     ${SPECIESF} ${SID}
+mixture     negas ${SID} nrho 1.0e22 temp ${TGAS}
+mixture     fillgas ${SID} nrho ${FILLN} temp ${TGAS}
 global      fnum ${FNUM}
-collide     vss negas ne.vss
+collide     vss negas ${VSSF}
 read_surf   ${SURF} type group cellwalls clip
-surf_collide walls diffuse 23.0 1.0
+surf_collide walls diffuse ${TGAS} 1.0
 surf_modify cellwalls collide walls
 group       gasinlet surf type 2
 region      gas cylinder x 0 0 0.01524 0.0 0.04547
@@ -66,7 +71,7 @@ create_particles fillgas n 0 region gas
 balance_grid rcb part
 fix         bal balance 5000 1.1 rcb time
 global      particle/reorder 100
-fix         src emit/surf negas gasinlet normal yes mflow ${MDOT} 23.0
+fix         src emit/surf negas gasinlet normal yes mflow ${MDOT} ${TGAS}
 compute     cg grid all negas nrho u v w
 compute     tg thermal/grid all negas temp
 stats_modify flush yes

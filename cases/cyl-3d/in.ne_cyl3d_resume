@@ -3,19 +3,23 @@
 # NDUMPWIN and STEADYDONE with -var (see the production block). field.grid is
 # appended to.
 
+# Gas (defaults neon at 23 K; must match the run being resumed): SID, VSSF, TGAS
+variable    SID index Ne
+variable    VSSF index ne.vss
+variable    TGAS index 23.0
 seed        8675309
 read_restart ${RESTARTFILE}
 balance_grid rcb cell
 global      mem/limit 1900
-mixture     negas Ne nrho 1.0e22 temp 23.0
-mixture     fillgas Ne nrho ${FILLN} temp 23.0
+mixture     negas ${SID} nrho 1.0e22 temp ${TGAS}
+mixture     fillgas ${SID} nrho ${FILLN} temp ${TGAS}
 global      fnum ${FNUM}
-collide     vss negas ne.vss
-surf_collide walls diffuse 23.0 1.0
+collide     vss negas ${VSSF}
+surf_collide walls diffuse ${TGAS} 1.0
 surf_modify cellwalls collide walls
 fix         bal balance 5000 1.1 rcb time
 global      particle/reorder 100
-fix         src emit/surf negas gasinlet normal yes mflow ${MDOT} 23.0
+fix         src emit/surf negas gasinlet normal yes mflow ${MDOT} ${TGAS}
 compute     cb boundary all n
 fix         ab ave/time 10 500 5000 c_cb[1] mode vector
 compute     cg grid all negas nrho u v w
