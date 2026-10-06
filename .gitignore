@@ -9,3 +9,4 @@ log.sparta
 *.out
 *.err
 logs/
+docs/refs/

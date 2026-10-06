@@ -3,13 +3,10 @@
 
 Proxy potential: Ba+-He (the F atom is ignored, as for neon).
   r >= RJ : Tang-Toennies form V = A exp(-b r) - f4(br) C4/r^4 - f6(br) C6/r^6
-            C4 = alpha_He/2 = 0.6916 a.u. (alpha_He = 1.3832 a.u., exact);
-            Re and De from the CCSD(T)/CBS Ba+-RG potentials of Buchachenko & Viehland,
-            J. Chem. Phys. 148, 154304 (2018), via their He/Ne ratios as recorded in
-            fitplot.py (De_Ne/De_He = 3.35, Re_Ne/Re_He = 0.864) applied to the Ba+-Ne values
-            used for the neon table (Re 4.267 A, De 75.0 cm^-1):  Re = 4.939 A, De = 22.39 cm^-1;
-            C6 = 67 a.u. (London estimate: alpha(Ba+) 124 a.u., IP(Ba+) 10.0 eV, alpha_He, IP_He);
-            A, b fitted to (Re, De).
+            fitted to the CCSD(T)/CBS Ba+-He potential of Buchachenko & Viehland,
+            J. Chem. Phys. 148, 154304 (2018), Table IV: sigma 4.225 A, Re 4.921 A,
+            De 22.4 cm^-1, C4 = 0.71 a.u. (their fitted value; asymptotic alpha_He/2 = 0.69),
+            the same recipe as the Ba+-Ne table (ion.py); A, b, C6 fitted to (sigma, Re, De).
   r <= ra : ZBL universal repulsion for Ba-He (scaled by s), exponential bridge to RJ.
 Q1(E): quantum partial waves (Numerov) for E_cm <= E_Q, classical deflection integral above
 (they agree to ~1% at the join). Variants central/soft/stiff: ra = 1.5/1.2/1.8 A, ZBL x1/0.5/2,
@@ -28,9 +25,9 @@ EH_K, A0 = 315775.02, 0.529177
 HB2 = 24.2537                          # hbar^2/(2 amu kB A^2) [K A^2]
 m_ion, m_gas = 156.325, 4.002602
 MU = m_ion * m_gas / (m_ion + m_gas)
-C4 = 0.6916 * EH_K * A0**4             # K A^4
-C6 = 67.0 * EH_K * A0**6               # K A^6
-RE, DE = 4.267 / 0.864, 75.0 / 3.35 * 1.438777     # A, K
+C4 = 0.71 * EH_K * A0**4               # K A^4 (B&V 2018 Table IV, CBS)
+SIG0, RE, DE = 4.225, 4.921, 22.4 * 1.438777       # A, A, K (B&V 2018 Table IV, CBS)
+C6 = None                              # fitted (fit_ab)
 RJ = 3.3                               # A: TT form used for r >= RJ
 T_CELL = 4.0
 E_Q = 150.0                            # K: quantum below, classical above
@@ -45,20 +42,24 @@ def tt(n, x):
     return 1 - np.exp(-x) * s
 
 
-def W(r, b):
-    return tt(4, b * r) * C4 / r**4 + tt(6, b * r) * C6 / r**6
+def W(r, b, c6=None):
+    c6 = C6 if c6 is None else c6
+    return tt(4, b * r) * C4 / r**4 + tt(6, b * r) * c6 / r**6
 
 
 def fit_ab():
-    r = np.linspace(3.0, 9.0, 6001); best = None
-    for b in np.linspace(1.0, 4.5, 701):
-        # choose A so the minimum depth is DE at the grid minimum: scan A on a log grid
-        for lA in np.linspace(math.log(1e4), math.log(1e9), 400):
-            v = math.exp(lA) * np.exp(-b * r) - W(r, b); i = np.argmin(v)
-            err = ((r[i] - RE) / 0.005) ** 2 + ((-v[i] - DE) / 0.1) ** 2
+    """A from V(SIG0) = 0; b and C6 on a grid to match (Re, De), as ion.fit_tt does for Ne."""
+    global C6
+    r = np.linspace(3.5, 9.0, 5501); best = None
+    for b in np.linspace(1.0, 4.5, 351):
+        for c6 in np.linspace(0, 400, 201) * EH_K * A0**6:
+            A = W(np.array([SIG0]), b, c6)[0] * math.exp(b * SIG0)
+            v = A * np.exp(-b * r) - W(r, b, c6); i = np.argmin(v)
+            err = ((r[i] - RE) / 0.01) ** 2 + ((-v[i] - DE) / 0.1) ** 2
             if best is None or err < best[0]:
-                best = (err, math.exp(lA), b, r[i], -v[i])
-    return best
+                best = (err, A, b, r[i], -v[i], c6)
+    C6 = best[5]
+    return best[:5]
 
 
 def V_zbl(r, Z1=56, Z2=2):
@@ -155,7 +156,7 @@ def main():
           f"targets {RE:.3f} A, {DE:.2f} K")
     V0 = make_V(A, b, 1.5, 1.0)
     rr = np.linspace(2.5, 6, 3501); vv = V0(rr); s0 = rr[np.where(vv > 0)[0].max()]
-    print(f"sigma0 (V=0) = {s0:.3f} A (Ne proxy: 3.254 A; sigma0/Re He {s0/RE:.3f} vs Ne {3.254/4.267:.3f})")
+    print(f"sigma0 (V=0) = {s0:.3f} A (target {SIG0}); C6 = {C6/(EH_K*A0**6):.0f} a.u.")
     rg = np.concatenate([np.linspace(0.05, 2, 4000), np.linspace(2, 80, 26000)[1:], np.geomspace(80, 4000, 3000)[1:]])
     variants = {"central": (1.5, 1.0), "low": (1.2, 0.5), "high": (1.8, 2.0)}
     Vs = {k: make_V(A, b, ra, s) for k, (ra, s) in variants.items()}
@@ -178,8 +179,9 @@ def main():
     out = "tracer/data/bafplus_he_q1.tsv"
     with open(out, "w") as f:
         f.write("# BaF+ - He BARE momentum-transfer cross section Q1(E) -- reference data; the tracer uses bafplus_he_sigma_tracer.tsv.\n")
-        f.write(f"# Ba+-He proxy potential: TT form (C4 = alpha_He/2 = 0.6916 a.u., C6 = 67 a.u., Re {re:.3f} A, De {de/1.438777:.2f} cm^-1,\n")
-        f.write("#   from the Buchachenko & Viehland JCP 148, 154304 (2018) He/Ne ratios applied to their Ba+-Ne values) for r >= 3.3 A,\n")
+        f.write(f"# Ba+-He proxy potential: TT form fitted to the CCSD(T)/CBS Ba+-He potential of Buchachenko & Viehland,\n")
+        f.write(f"#   JCP 148, 154304 (2018), Table IV (sigma 4.225 A, Re 4.921 A, De 22.4 cm^-1, C4 0.71 a.u.; fit gives Re {re:.3f} A,\n")
+        f.write(f"#   De {de/1.438777:.2f} cm^-1, C6 {C6/(EH_K*A0**6):.0f} a.u.) for r >= 3.3 A,\n")
         f.write("#   ZBL Ba-He repulsion inside r_a (central 1.5 A x1, low 1.2 A x0.5, high 1.8 A x2), exponential bridge.\n")
         f.write(f"# Q1: quantum partial waves (Numerov) below E_cm = {E_Q:g} K, classical above. Generated by tools/cross_section/ion_he.py.\n")
         f.write("# Units: E_cm in K, Q1 in m^2.\n# E_cm_K\tQ1_central_m2\tQ1_low_m2\tQ1_high_m2\n")
