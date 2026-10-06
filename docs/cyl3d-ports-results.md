@@ -15,22 +15,42 @@ The cyl-3d `ports` scan uses:
 Dashboard: https://claude.ai/artifact/2Qavs8GntHojgLd1dwYzBY (Ne cylinder tab).
 Figures and data: `results/figures/cyl3d_ports_*` (summary CSV: `cyl3d_ports_summary.csv`).
 
-## Coverage: 190 of 200 points
+## Coverage: 193 of 200 points
 
-| Missing | Why |
-|---|---|
-| 50 SCCM, 3500–5000 eV (7 points) | 3750–5000 eV jobs cancelled at the user's request (2026-10-05 19:45); the 3500 eV job hit its 24 h limit |
-| 30 SCCM 250 eV; 40 SCCM 4250 and 4750 eV | Crashed with a Julia bus error on 2026-10-04 (shared compile-cache rewrite). Each kept its histograms and ion log, but only 1801 of 2000 final ion states (the last-finishing ions were lost, so the sample is biased). Their rescue jobs were cancelled on 2026-10-05 by mistake: the audit counted `_xr.csv` files as finished points instead of `.out` files |
+**Missing: 50 SCCM, 3500–5000 eV (7 points).** The 3750–5000 eV jobs were cancelled at
+the user's request (2026-10-05 19:45); the 3500 eV job hit its 24 h limit.
 
-The two 50 SCCM GIFs at 3000 and 3250 eV were never rendered (time limit). The
-partial `.out.tmp` files are kept.
+**Partial: 30 SCCM 250 eV; 40 SCCM 4250 and 4750 eV (1801–1807 of 2000 ions).**
+
+- **What happened:** these runs crashed with a Julia bus error on 2026-10-04 (a shared
+  compile-cache rewrite) while writing their final ion states. Their histograms and ion
+  logs are complete for all 2000 ions.
+- **Mistake:** their rescue jobs were cancelled on 2026-10-05 because the audit counted
+  `_xr.csv` files as finished points instead of `.out` files.
+- **What's used:** the complete rows of each crashed `.out.tmp`, as
+  `tracer_..._s1_partial.out` (the originals are kept).
+- **Bias check:** the complete ion logs let us compare the 193–199 lost ions with the
+  kept ones.
+
+  | Point | Reached the outlet, kept / lost | Mean depth at 1 eV, kept / lost (mm) |
+  |---|---|---|
+  | 30 SCCM, 250 eV | 2.1% / 2.5% | 5.8 / 5.6 |
+  | 40 SCCM, 4250 eV | 35.3% / 37.3% | 14.0 / 14.4 |
+  | 40 SCCM, 4750 eV | 36.8% / 37.8% | 14.9 / 14.5 |
+
+  All differences are under 1σ, so the samples show no sign of bias, only slightly
+  wider error bars.
+
+The 50 SCCM GIFs at 3000 and 3250 eV were never rendered (time limit). A 2.6 GB partial
+trajectory file from the 3000 eV render is left in `sccm50/post/gif/`.
 
 ## Main results
 
 - **Best point:** thermalized (extracted, < 0.1 eV) is **36.8%** (95% interval
   34.7–38.9) at 40 SCCM, 5 keV.
-- **Next best:** 34.5% (35 SCCM, 4.75 keV), 34.4% (40 SCCM, 4.5 keV) and 33.1%
-  (30 SCCM, 5 keV).
+- **Next best:** 36.7% (40 SCCM, 4.75 keV, 1807 ions), 35.1% (40 SCCM, 4.25 keV,
+  1807 ions), 34.5% (35 SCCM, 4.75 keV) and 34.4% (40 SCCM, 4.5 keV). The optimum is
+  broad: 34–37% from 4 to 5 keV at 35–40 SCCM.
 - **Extracted vs thermalized:** above ~15 SCCM essentially every extracted ion is
   thermalized. The ~0.03 eV exit energy is the gas flow carrying the ions, not heat (see
   `docs/sanity-checks-cyl3d.md`).
