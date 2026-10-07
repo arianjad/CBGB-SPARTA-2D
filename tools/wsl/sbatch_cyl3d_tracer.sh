@@ -98,7 +98,7 @@ for E in $ENERGIES; do
   || fail=1
   # 3D exit-velocity view of the ions leaving through the inlet (shown below the GIF on the dashboard)
   [ -f "tracer_${COND}-e${E}_s$SEED.out" ] && python "$SLURM_SUBMIT_DIR/tools/render_exit_velocity_3d.py" \
-       "tracer_${COND}-e${E}_s$SEED" --surf "$SURF" --geom "$GEOM" --out "${g}_v3d.png" \
+       "tracer_${COND}-e${E}_s$SEED" --surf "$SURF" --field frozen.grid --geom "$GEOM" --out "${g}_v3d.png" \
        --title "$SCCM SCCM, $E eV" >> "$g.render.log" 2>&1
   rm -f "$g.traj"
   echo "$(date) SCCM=$SCCM E=$E eV gif rc=$fail $(( $(date +%s) - t0 )) s"
