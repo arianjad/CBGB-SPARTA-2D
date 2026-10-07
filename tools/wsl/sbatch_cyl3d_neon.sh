@@ -30,6 +30,12 @@
 set -uo pipefail
 cd "$SLURM_SUBMIT_DIR"
 source tools/wsl/site_env.sh; site_mpi
+# On the GPU partitions (e.g. submit-gpu-express) the node's Slurm name differs from its
+# hostname, so mpirun starts its daemon through srun, which aborts if SLURM_CPUS_PER_TASK
+# (2 there) and SLURM_TRES_PER_TASK (cpu=1) disagree. Make them agree (no-op on submit).
+if [ -n "${SLURM_CPUS_PER_TASK:-}" ] && [ -n "${SLURM_TRES_PER_TASK:-}" ]; then
+  export SLURM_TRES_PER_TASK="cpu=$SLURM_CPUS_PER_TASK"
+fi
 
 : "${SCCM:?pass SCCM=<flow> via --export}"
 source tools/wsl/cyl3d_flow_params.sh
