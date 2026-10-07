@@ -41,7 +41,7 @@ PNGCACHE = "results/dashboard/runpng"   # per-run PNGs, packed into SITE/<run>/p
 FLOWS = [5, 10, 15, 20, 25, 30, 35, 40, 45, 50]
 # port configurations (gen_cyl3d.py --config); the first is shown when the page loads
 CONFIGS = [
-    dict(key="ports", label="Old-cell ports", tab="Ne cylinder", gas="Ne", gasname="neon", sid="Ne", vss="ne.vss", mgas=20.1797, flows=FLOWS,
+    dict(key="ports", label="Old-cell ports", tab="Ne", gas="Ne", gasname="neon", sid="Ne", vss="ne.vss", mgas=20.1797, flows=FLOWS,
          title="BaF⁺ extraction from a plain cylindrical neon cell",
          sub="30.5 mm bore × 45.5 mm chamber, 23 K neon at 5–50 SCCM; BaF⁺ injected on axis at the inlet port "
              "(computed BaF⁺–Ne cross-section table).",
@@ -49,7 +49,7 @@ CONFIGS = [
               "Fixed 0.4 mm DSMC lattice; time step below the local collision time everywhere.",
          runbase="cyl-ports", job="ports", fig="results/figures/cyl3d_ports", run="run/ports", outlet=CYL_PORTS_OUTLET_X,
          nen=20, energies="0.25–5 keV in 250 eV steps"),
-    dict(key="ports-plug", label="One hole (outlet plugged)", tab="Ne cylinder", gas="Ne", gasname="neon", sid="Ne",
+    dict(key="ports-plug", label="One hole (outlet plugged)", tab="Ne", gas="Ne", gasname="neon", sid="Ne",
          vss="ne.vss", mgas=20.1797, flows=[50],
          title="BaF⁺ extraction from a plain cylindrical neon cell",
          sub="30.5 mm bore × 45.5 mm chamber, 23 K neon; BaF⁺ injected on axis at the inlet port "
@@ -68,7 +68,7 @@ CONFIGS = [
                  "temperature is given in the right panel's title."),
                 ("results/figures/exitv_ports_50sccm_250eV.png",
                  "Reference: the same analysis for the open-outlet cell at 50 SCCM, 250 eV.")]),
-    dict(key="ap5", label="5 mm apertures", tab="Ne cylinder", gas="Ne", gasname="neon", sid="Ne", vss="ne.vss", mgas=20.1797, flows=FLOWS,
+    dict(key="ap5", label="5 mm apertures", tab="Ne", gas="Ne", gasname="neon", sid="Ne", vss="ne.vss", mgas=20.1797, flows=FLOWS,
          title="BaF⁺ extraction from a plain cylindrical neon cell",
          sub="30.5 mm bore × 45.5 mm chamber, 23 K neon at 5–50 SCCM; BaF⁺ injected on axis at the inlet port "
              "(computed BaF⁺–Ne cross-section table).",
@@ -76,7 +76,7 @@ CONFIGS = [
               "old cell at the same flow, so ions crossed without stopping). Lattice ≤ 2 mean free paths per flow.",
          runbase="cyl-scan", job="cyl", fig="results/figures/cyl3d_scan", run="run", outlet=CYL_OUTLET_X,
          nen=25, energies="0.2–5 keV in 200 eV steps"),
-    dict(key="ports-he", label="Old-cell ports", tab="He cylinder", gas="He", gasname="helium", sid="He", vss="he.vss",
+    dict(key="ports-he", label="Old-cell ports", tab="He", gas="He", gasname="helium", sid="He", vss="he.vss",
          mgas=4.002602, flows=[10, 20, 30, 40],
          title="BaF⁺ extraction from a plain cylindrical helium cell",
          sub="The same cylinder and ports with 4 K helium at 10–40 SCCM (same mean thermal speed as 23 K neon, so a "
@@ -347,6 +347,12 @@ def main():
                 if os.path.exists(src) and (a.redo_gifs or not os.path.exists(gif)):
                     small_gif(src, gif)
                 st["gif"] = f"{c['run']}/{f}_{E}.gif" if os.path.exists(gif) else None
+                v3s = f"{d}/post/gif/sccm{f}_{a.cond}_e{E}_v3d.png"     # tools/render_exit_velocity_3d.py
+                v3d = f"{SITE}/{c['run']}/{f}_{E}_v3d.png"
+                if os.path.exists(v3s) and (not os.path.exists(v3d) or os.path.getmtime(v3d) < os.path.getmtime(v3s)):
+                    with open(v3s, "rb") as fi, open(v3d, "wb") as fo:
+                        fo.write(fi.read())
+                st["v3d"] = f"{c['run']}/{f}_{E}_v3d.png" if os.path.exists(v3d) else None
                 row["runs"].append(st)
             pp = f"{SITE}/{c['run']}/png_{f}.json"
             if pack:

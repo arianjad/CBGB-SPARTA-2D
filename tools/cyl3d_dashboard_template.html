@@ -127,7 +127,7 @@ function render(key) {
   NEN = c.nen;
   for (const b of tabs.children) b.setAttribute("aria-selected", String(b.dataset.tab === c.tab));
   const inTab = DATA.configs.filter(x => x.tab === c.tab);
-  sw.hidden = inTab.length < 2;
+  sw.hidden = inTab.length < 1;          // always show the geometry subtabs, even a single one
   for (const b of sw.children) {
     b.hidden = b.dataset.tab !== c.tab;
     b.setAttribute("aria-pressed", String(b.id === "cfg-" + key));
@@ -219,6 +219,8 @@ function buildDetail(fl, r, cell) {
   const gif = r.gif ? `<figure><img src="${esc(r.gif)}" alt="BaF+ trajectories at ${fl.f} SCCM, ${r.E} eV" loading="lazy">` +
     `<figcaption>40 ions, log time to 1 ms then linear; color = eventual fate (blue extracted, orange wall, green back out the inlet).</figcaption></figure>`
     : `<p class="empty">Trajectory GIF not rendered yet.</p>`;
+  const v3d = r.v3d ? `<figure class="full"><img src="${esc(r.v3d)}" alt="3D view of exit velocities of ions leaving through the inlet" loading="lazy">` +
+    `<figcaption>Exit velocities of the ions that leave through the inlet, as arrows at their exit points (100 m/s = 2 mm), colored by transverse speed. Left: oblique view from outside the inlet. Right: end-on, transverse part only; arrows growing with radius are the plume's divergence.</figcaption></figure>` : "";
   cell.innerHTML = `<div class="det">${gif}<dl class="kv">` +
     `<dt>Flow / energy</dt><dd>${fl.f} SCCM, ${(r.E / 1000).toFixed(1)} keV</dd>` +
     `<dt>Ions traced</dt><dd>${r.n}</dd>` +
@@ -230,7 +232,7 @@ function buildDetail(fl, r, cell) {
     `<dt>Median exit KE</dt><dd>${r.ke_med_eV != null ? r.ke_med_eV + " eV" : "–"}</dd>` +
     `<dt>Median transit</dt><dd>${r.t_med_ms != null ? r.t_med_ms.toFixed(2) + " ms" : "–"}</dd>` +
     `<dt>${CUR.gasname[0].toUpperCase() + CUR.gasname.slice(1)} chamber n</dt><dd>${esc(fl.n) || "–"} m⁻³</dd></dl>` +
-    `<figure class="full"><img class="runfig" alt="Energy loss vs depth, stopping-depth and exit-energy histograms"></figure></div>`;
+    `${v3d}<figure class="full"><img class="runfig" alt="Energy loss vs depth, stopping-depth and exit-energy histograms"></figure></div>`;
   if (r.pack) packImg(r.pack, String(r.E), cell.querySelector("img.runfig"));
 }
 
