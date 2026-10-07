@@ -41,7 +41,7 @@ esac
 source "$SLURM_SUBMIT_DIR/tools/wsl/cyl3d_flow_params.sh"; cyl_flow_params "$SCCM"   # SURF, RUNBASE_DEF, GAS, MGAS_U for CONFIG
 # helium (CONFIG=ports-he): BaF+-He table (tools/cross_section/ion_he.py), same variant column
 [ "$GAS" = He ] && A="$A --sigma-table $SLURM_SUBMIT_DIR/tracer/data/bafplus_he_sigma_tracer.tsv"
-GEOM=$(case "$CONFIG" in ports|ports-he) echo cylports ;; *) echo cyl ;; esac)
+GEOM=$(case "$CONFIG" in ports|ports-he|ports-plug) echo cylports ;; *) echo cyl ;; esac)
 RUNDIR="$HOME/orcd/scratch/cbgb-sparta-3d/${RUNBASE:-$RUNBASE_DEF}/sccm$SCCM"
 cd "$RUNDIR/post" || exit 2
 [ -f frozen.grid ] || { echo "no frozen.grid -- run sbatch_cyl3d_post.sh first"; exit 2; }

@@ -55,6 +55,10 @@ L = 45.47 * MM        # chamber length
 CONFIGS = {  # inlet radius, inlet wall, outlet radius, outlet wall (m), output file
     "ap5": (2.5 * MM, 1.27 * MM, 2.5 * MM, 1.27 * MM, "cell_cyl3d.surf"),
     "ports": (1.27 * MM, 1.27 * MM, 1.5875 * MM, 5.334 * MM, "cell_cyl3d_ports.surf"),
+    # ports with the outlet plugged: the chamber's far end is a solid wall (outlet radius 0;
+    # the 5.334 mm of the old outlet channel stays solid body). Gas and ions leave only
+    # through the inlet port.
+    "ports-plug": (1.27 * MM, 1.27 * MM, 0.0, 5.334 * MM, "cell_cyl3d_ports_plug.surf"),
 }
 A, T, A2, T2 = CONFIGS["ap5"][:4]
 RO = 19.05 * MM       # outer radius of the body
@@ -66,6 +70,10 @@ GAS_NSEG = 12         # gas-patch azimuthal segments (12 x 0.50 mm = 6 mm), cent
 
 # profile vertices (x, r), walked so the revolved triangles face out of the body
 def make_profile():
+    if A2 == 0.0:   # plugged outlet: the end wall runs down to the axis
+        return [(-T, A), (0.0, A), (0.0, R),
+                (GAS_X - GAS_DX / 2, R), (GAS_X + GAS_DX / 2, R),
+                (L, R), (L, 0.0), (L + T2, 0.0), (L + T2, RO), (-T, RO)]
     return [(-T, A), (0.0, A), (0.0, R),
             (GAS_X - GAS_DX / 2, R), (GAS_X + GAS_DX / 2, R),
             (L, R), (L, A2), (L + T2, A2), (L + T2, RO), (-T, RO)]
@@ -76,7 +84,7 @@ def edge_type(p, q, j):
     (x1, r1), (x2, r2) = p, q
     if r1 == r2 == A and x2 <= 0:
         return 3
-    if r1 == r2 == A2 and x1 >= L:
+    if A2 > 0 and r1 == r2 == A2 and x1 >= L:
         return 4
     if r1 == r2 == R and x1 == GAS_X - GAS_DX / 2:
         # segments centred on theta = -90 deg (-z)
@@ -96,7 +104,7 @@ def main():
     pts, index = [], {}
 
     def pid(k, j):
-        key = (k, j % NTH)
+        key = (k, 0 if PROFILE[k][1] == 0.0 else j % NTH)   # points on the axis are shared
         if key not in index:
             x, r = PROFILE[k]
             th = 2 * math.pi * (j % NTH) / NTH
@@ -112,8 +120,9 @@ def main():
             a, b = pid(k, j), pid(k2, j)
             c, d = pid(k2, j + 1), pid(k, j + 1)
             t = edge_type(PROFILE[k], PROFILE[k2], j)
-            tris.append((t, a, b, c))
-            tris.append((t, a, c, d))
+            for tri in ((t, a, b, c), (t, a, c, d)):
+                if len({tri[1], tri[2], tri[3]}) == 3:   # drop triangles collapsed on the axis
+                    tris.append(tri)
 
     # orientation: flip everything if the signed volume came out negative
     vol = 0.0

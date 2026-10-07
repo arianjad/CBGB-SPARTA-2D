@@ -14,6 +14,10 @@
 #          cyl-ports-he. Expected density: the neon value scaled by the mean-speed ratio
 #          (c_bar He 4 K 145 m/s vs Ne 23 K 155 m/s): 1.34e21 m^-3 per SCCM. Same 0.4 mm lattice,
 #          same strict dt < tau.
+#   ports-plug  the ports geometry with the outlet plugged (gen_cyl3d.py --config ports-plug):
+#          gas and ions leave only through the inlet. Expected density: the ports value
+#          x 6.6/3.4 (Clausing-weighted open area, both ports vs inlet only) = 2.44e21 per SCCM.
+#          Data in cyl-ports-plug.
 #   ap5    5 mm apertures through 1.27 mm plates, data in cyl-scan (2026-10-03 run,
 #          stopped after 5-15 SCCM): 2.9e20 per SCCM, KNMIN 0.5, 0.1 s.
 # It also sets KN (the KNMIN in effect), SIMS (simulated seconds), SURF, XOUT (outlet face x, m), AEFF_MM2 (Clausing-weighted port area
@@ -58,6 +62,8 @@ cyl_flow_params() {
     ports-he) NPER=1.34e21; KN="${KNMIN:-0}"; SIMS="${SIM_S:-0.5}"; SURF=cell_cyl3d_ports.surf; XOUT=0.050804
            AEFF_MM2=6.6; RUNBASE_DEF=cyl-ports-he
            GAS=He; SID=He; SPECIESF=he.species; VSSF=he.vss; TGAS=4.0; MGAS_U=4.002602; TFLOOR=1.0 ;;
+    ports-plug) NPER=2.44e21; KN="${KNMIN:-0}"; SIMS="${SIM_S:-0.5}"; SURF=cell_cyl3d_ports_plug.surf; XOUT=0.050804
+           AEFF_MM2=3.4; RUNBASE_DEF=cyl-ports-plug ;;
     ports) NPER=1.26e21; KN="${KNMIN:-0}"; SIMS="${SIM_S:-0.5}"; SURF=cell_cyl3d_ports.surf; XOUT=0.050804
            AEFF_MM2=6.6; RUNBASE_DEF=cyl-ports ;;
     ap5)   NPER=2.9e20; KN="${KNMIN:-0.5}"; SIMS="${SIM_S:-0.1}"; SURF=cell_cyl3d.surf; XOUT=0.04674
@@ -76,6 +82,8 @@ lam = 1 / (math.pi * math.sqrt(2) * d**2 * n * (tref / T)**(w - 0.5))       # SP
 mr = m / 2
 tau = 1 / (2 * d**2 * n * math.sqrt(2 * math.pi * kB * tref / mr) * (T / tref)**(1 - w))
 R = max(4, math.ceil(1.6e-3 * knmin / lam))     # cell <= lambda / KNMIN
+import os
+R = int(os.environ.get("REFINE_SET") or R)       # coarse test runs: e.g. REFINE_SET=2 (0.8 mm)
 h = 1.6e-3 / R
 def sig2(x):
     e = math.floor(math.log10(x)); return math.floor(x / 10**(e - 1)) * 10**(e - 1)
@@ -94,6 +102,7 @@ EOF
     WINDOW=$(python3 -c "print(max(5000, int(round(0.01/$DT/5000))*5000))")
     ADAPT_STEPS=$(python3 -c "print(max(1000, int(round(2.5e-3/$DT/1000))*1000))")
   fi
+  ADAPT_STEPS="${ADAPT_SET:-$ADAPT_STEPS}"     # short test runs
   WINDOW="${WINDOW_SET:-$WINDOW}"
   TOTAL=$(python3 -c "print(max(1, int(round($SIMS/$DT/$WINDOW)))*$WINDOW)")
   # job size: ~1.5M particles per task (16..48 tasks); walltime from the smoke-test rate

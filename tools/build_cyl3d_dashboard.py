@@ -49,6 +49,25 @@ CONFIGS = [
               "Fixed 0.4 mm DSMC lattice; time step below the local collision time everywhere.",
          runbase="cyl-ports", job="ports", fig="results/figures/cyl3d_ports", run="run/ports", outlet=CYL_PORTS_OUTLET_X,
          nen=20, energies="0.25–5 keV in 250 eV steps"),
+    dict(key="ports-plug", label="One hole (outlet plugged)", tab="Ne cylinder", gas="Ne", gasname="neon", sid="Ne",
+         vss="ne.vss", mgas=20.1797, flows=[50],
+         title="BaF⁺ extraction from a plain cylindrical neon cell",
+         sub="30.5 mm bore × 45.5 mm chamber, 23 K neon; BaF⁺ injected on axis at the inlet port "
+             "(computed BaF⁺–Ne cross-section table).",
+         desc="New geometry, first coarse test: the old-cell ports with the outlet plugged, so gas and ions leave only "
+              "through the inlet. 50 SCCM, the neon scan's best case for ions leaving back through the inlet (98% "
+              "out, all below 0.1 eV, with the outlet open). Coarse 0.8 mm DSMC lattice and only ~11 ms of gas time "
+              "(started at the estimated density), so the field is a first look, not converged; tracer with the "
+              "free-flight fix.",
+         runbase="cyl-ports-plug-coarse", job="plug", fig="results/figures/cyl3d_ports-plug", run="run/ports-plug",
+         outlet=CYL_PORTS_OUTLET_X, nen=1, energies="250 eV",
+         extra=[("results/figures/exitv_ports-plug_50sccm_250eV.png",
+                 "Velocities of the ions leaving through the inlet (recorded 21 mm outside it): transverse components "
+                 "vs a 23 K Maxwellian, axial velocity, and radial velocity vs exit radius. The outward speed grows "
+                 "with distance from the axis (plume divergence); with that removed, the random transverse "
+                 "temperature is given in the right panel's title."),
+                ("results/figures/exitv_ports_50sccm_250eV.png",
+                 "Reference: the same analysis for the open-outlet cell at 50 SCCM, 250 eV.")]),
     dict(key="ap5", label="5 mm apertures", tab="Ne cylinder", gas="Ne", gasname="neon", sid="Ne", vss="ne.vss", mgas=20.1797, flows=FLOWS,
          title="BaF⁺ extraction from a plain cylindrical neon cell",
          sub="30.5 mm bore × 45.5 mm chamber, 23 K neon at 5–50 SCCM; BaF⁺ injected on axis at the inlet port "
@@ -184,7 +203,7 @@ def flow_row(f, runbase, jobs, jobpfx, sid="Ne", vss="ne.vss"):
     rule = open(f"{d}/post/rule_check.txt").read() if os.path.exists(f"{d}/post/rule_check.txt") else ""
     m = re.search(r"REFINE=\d+ \(([\d.]+) mm\)", log)
     st = jobs.get(f"{jobpfx}-ne{f}", "")
-    if "solver exit code 0" in log and os.path.exists(f"{d}/post/frozen.grid"):
+    if ("solver exit code 0" in log or "smoke exit 0" in log) and os.path.exists(f"{d}/post/frozen.grid"):
         neon = "done"
     elif st:
         neon = st.lower()
@@ -354,6 +373,14 @@ def main():
                         fo.write(fi.read())
                     os.utime(dst, (os.stat(c["fig"] + suf).st_atime, os.stat(c["fig"] + suf).st_mtime))
                 figs.append(dict(src=f"fig/{base}{suf}", cap=cap))
+        for src, cap in c.get("extra", []):          # per-config extra figures
+            if os.path.exists(src):
+                dst = f"{SITE}/fig/{os.path.basename(src)}"
+                if not os.path.exists(dst) or fhash(dst) != fhash(src):
+                    with open(src, "rb") as fi, open(dst, "wb") as fo:
+                        fo.write(fi.read())
+                    os.utime(dst, (os.stat(src).st_atime, os.stat(src).st_mtime))
+                figs.append(dict(src=f"fig/{os.path.basename(src)}", cap=cap))
         cfgs.append(dict(key=c["key"], label=c["label"], desc=c["desc"], nen=c["nen"], energies=c["energies"],
                          tab=c["tab"], gas=c["gas"], gasname=c["gasname"], title=c["title"], sub=c["sub"],
                          total=len(c["flows"]) * c["nen"],
