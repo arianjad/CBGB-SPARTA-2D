@@ -219,8 +219,8 @@ function buildDetail(fl, r, cell) {
   const gif = r.gif ? `<figure><img src="${esc(r.gif)}" alt="BaF+ trajectories at ${fl.f} SCCM, ${r.E} eV" loading="lazy">` +
     `<figcaption>40 ions, log time to 1 ms then linear; color = eventual fate (blue extracted, orange wall, green back out the inlet).</figcaption></figure>`
     : `<p class="empty">Trajectory GIF not rendered yet.</p>`;
-  const v3d = r.v3d ? `<figure class="full"><img src="${esc(r.v3d)}" alt="3D view of exit velocities of ions leaving through the inlet" loading="lazy">` +
-    `<figcaption>Gas streamlines through the inlet (seeded in and just inside the bore; traced out into the plume and a short way back into the chamber) and the exit points of the ions that leave through the inlet, both colored by transverse speed. Inside the chamber the mean flow is too slow to show above the DSMC noise.</figcaption></figure>` : "";
+  const v3d = r.v3d ? `<figure class="full"><img src="${esc(r.v3d)}" alt="Neon flow speed isolines and streamlines in the plane through the axis" loading="lazy">` +
+    `<figcaption>Neon flow in the plane through the axis: isolines of gas speed (m/s, from 10 m/s, above the noise of the run), grey streamlines for direction, walls in grey. Chamber flow slower than the noise is left unlabeled.</figcaption></figure>` : "";
   cell.innerHTML = `<div class="det">${gif}<dl class="kv">` +
     `<dt>Flow / energy</dt><dd>${fl.f} SCCM, ${(r.E / 1000).toFixed(1)} keV</dd>` +
     `<dt>Ions traced</dt><dd>${r.n}</dd>` +
