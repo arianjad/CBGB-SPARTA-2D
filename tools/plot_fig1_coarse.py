@@ -1,13 +1,9 @@
 #!/usr/bin/env python3
 """Coarse-rebinned forward-velocity plot in Takahashi Fig. 1's style.
 
-The paper never states DS2V's actual grid resolution, so this rebins our
-fine adaptive-mesh field data onto a uniform coarse raster for display --
-a plotting choice, not a re-simulation. Each source cell (at whatever its
-native refinement level is) contributes to the coarse bin containing its
-center, density-weighted, so bins average many small cells near the jet
-core and few large cells far away -- same underlying physics, just a
-coarser, less noisy picture.
+The paper doesn't give DS2V's grid resolution. This just rebins our
+adaptive-mesh field onto a uniform coarse raster for display: each cell goes
+into the bin holding its center, density-weighted.
 
 Usage: python plot_fig1_coarse.py RUN_DIR --surf SURF --out OUT.png
        [--frac F] [--bin BIN_M]

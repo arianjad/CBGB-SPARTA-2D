@@ -2,14 +2,14 @@
 
 The cyl-3d `ports` scan uses:
 
-- **Geometry:** a 30.5 mm bore × 45.5 mm chamber with the fluor-cell-3d ports
+- Geometry: a 30.5 mm bore × 45.5 mm chamber with the fluor-cell-3d ports
   (2.54 mm inlet through a 1.27 mm wall; 3.175 mm × 5.33 mm outlet channel). The rest
   of the old CAD features are removed.
-- **Scan:** 5–50 SCCM neon at 23 K, BaF⁺ injected on axis at the inlet at
+- Scan: 5–50 SCCM neon at 23 K, BaF⁺ injected on axis at the inlet at
   0.25–5 keV in 250 eV steps, 2000 ions per point.
-- **Cross sections:** the table-central BaF⁺–Ne cross section and the refit Ne–Ne VSS
+- Cross sections: the table-central BaF⁺–Ne cross section and the refit Ne–Ne VSS
   (`cases/cyl-3d/ne.vss`).
-- **DSMC:** a fixed 0.4 mm lattice, with the time step below the local collision time
+- DSMC: a fixed 0.4 mm lattice, with the time step below the local collision time
   everywhere. Every flow reached steady state (0.5% per 20 ms).
 
 Dashboard: https://claude.ai/artifact/2Qavs8GntHojgLd1dwYzBY (Ne cylinder tab).
@@ -17,19 +17,19 @@ Figures and data: `results/figures/cyl3d_ports_*` (summary CSV: `cyl3d_ports_sum
 
 ## Coverage: 193 of 200 points
 
-**Missing: 50 SCCM, 3500–5000 eV (7 points).** The 3750–5000 eV jobs were cancelled at
-the user's request (2026-10-05 19:45); the 3500 eV job hit its 24 h limit.
+Missing: 50 SCCM, 3500–5000 eV (7 points). The 3750–5000 eV jobs were cancelled
+(2026-10-05 19:45); the 3500 eV job hit its 24 h limit.
 
-**Partial: 30 SCCM 250 eV; 40 SCCM 4250 and 4750 eV (1801–1807 of 2000 ions).**
+Partial: 30 SCCM 250 eV; 40 SCCM 4250 and 4750 eV (1801–1807 of 2000 ions).
 
-- **What happened:** these runs crashed with a Julia bus error on 2026-10-04 (a shared
+- These runs crashed with a Julia bus error on 2026-10-04 (a shared
   compile-cache rewrite) while writing their final ion states. Their histograms and ion
   logs are complete for all 2000 ions.
-- **Mistake:** their rescue jobs were cancelled on 2026-10-05 because the audit counted
+- Their rescue jobs were cancelled on 2026-10-05 because the audit counted
   `_xr.csv` files as finished points instead of `.out` files.
-- **What's used:** the complete rows of each crashed `.out.tmp`, as
+- Used here: the complete rows of each crashed `.out.tmp`, as
   `tracer_..._s1_partial.out` (the originals are kept).
-- **Bias check:** the complete ion logs let us compare the 193–199 lost ions with the
+- Bias check: the complete ion logs let us compare the 193–199 lost ions with the
   kept ones.
 
   | Point | Reached the outlet, kept / lost | Mean depth at 1 eV, kept / lost (mm) |
@@ -46,15 +46,15 @@ trajectory file from the 3000 eV render is left in `sccm50/post/gif/`.
 
 ## Main results
 
-- **Best point:** thermalized (extracted, < 0.1 eV) is **36.8%** (95% interval
+- Best point: thermalized (extracted, < 0.1 eV) is 36.8% (95% interval
   34.7–38.9) at 40 SCCM, 5 keV.
-- **Next best:** 36.7% (40 SCCM, 4.75 keV, 1807 ions), 35.1% (40 SCCM, 4.25 keV,
+- Next best: 36.7% (40 SCCM, 4.75 keV, 1807 ions), 35.1% (40 SCCM, 4.25 keV,
   1807 ions), 34.5% (35 SCCM, 4.75 keV) and 34.4% (40 SCCM, 4.5 keV). The optimum is
   broad: 34–37% from 4 to 5 keV at 35–40 SCCM.
-- **Extracted vs thermalized:** above ~15 SCCM essentially every extracted ion is
+- Extracted vs thermalized: above ~15 SCCM nearly every extracted ion is
   thermalized. The ~0.03 eV exit energy is the gas flow carrying the ions, not heat (see
   `docs/sanity-checks-cyl3d.md`).
-- **Trends:** the best energy per flow rises with flow and is at or near the top of the
+- Trends: the best energy per flow rises with flow and is at or near the top of the
   range from 30 SCCM up:
 
   | Flow (SCCM) | Best energy | Thermalized |
@@ -68,7 +68,7 @@ trajectory file from the 3000 eV render is left in `sccm50/post/gif/`.
 
   The optimum may lie above 5 keV at 30–45 SCCM. 50 SCCM peaks at 18.9% (3.25 keV),
   but its 3.5–5 keV points are missing.
-- **Low energies at high flow lose ions out the inlet:** at 500 eV, the fraction
+- Low energies at high flow lose ions out the inlet. At 500 eV, the fraction
   leaving back through the inlet rises with flow:
 
   | Flow (SCCM) | Back out the inlet |
@@ -101,38 +101,36 @@ slash (the old scan's thermalized at 500 eV equals extracted).
 | 45 | 5.65e22 / 5.27e22 | – | 0.9 | 13.2 | 13.2 | 23.0 | 32.2 |
 | 50 | 6.24e22 / 5.88e22 | – | 0.4 | 10.8 | 10.2 | 22.6 | – |
 
-**Reading the comparison:**
-
-- **Up to 20 SCCM the two cells agree within ~2 points** at every energy. Statistical
+- Up to 20 SCCM the two cells agree within ~2 points at every energy. Statistical
   uncertainty is ±0.6–1.5 points, so the plain cylinder reproduces the old cell where
   ions thermalize mid-chamber.
-- **From 25 SCCM up, at 2–5 keV, the plain cylinder extracts more:** +7 to +11 points
+- From 25 SCCM up, at 2–5 keV, the plain cylinder extracts more: +7 to +11 points
   at 5 keV (for example 33% vs 22% at 30 SCCM, 37% vs 26% at 40 SCCM), and +3 to
   +7 points at 2 keV. At 0.5 keV, and at 45–50 SCCM and 2 keV, they agree again.
-- **The two runs differ in more than geometry,** so the high-flow gap can't be pinned
+- The two runs differ in more than geometry, so the high-flow gap can't be pinned
   on the CAD features alone:
-  1. **Ne–Ne model:** the old cell used Bird's 273 K VHS parameters
+  1. Ne–Ne model: the old cell used Bird's 273 K VHS parameters
      (`Ne 2.766e-10 0.66 273.15`), 61% too viscous at 23 K. The cylinder uses the
      ab initio refit. Viscosity sets the flow pattern that carries thermal ions to the
      outlet.
-  2. **Geometry:** internal features of the old cell versus a smooth bore.
-  3. **Density:** at the same flow, the cylinder is ~7% thinner.
-  4. **Lattice:** the cylinder's lattice is a fixed 0.4 mm, about 2.4–22 lattice
-     spacings per mean free path (see `docs/TODO.md`); the old grids differed.
+  2. Geometry: internal features of the old cell versus a smooth bore.
+  3. Density: at the same flow, the cylinder is ~7% thinner.
+  4. Lattice: the cylinder's lattice is a fixed 0.4 mm, lattice / mean free path
+     ~2.4–22 (see `docs/TODO.md`); the old grids differed.
 
   Item 1 can be separated by rerunning one high-flow cylinder field with Bird's
   parameters.
 
 ## Known biases common to both scans
 
-- **Start-of-flight free-path rule.** Each free path was drawn with the gas density at
+- Start-of-flight free-path rule. Each free path was drawn with the gas density at
   the flight's start point. Ions starting in the low-density inlet bore go 2–4 mm
   (12–22%) too deep, and the entrance dE/dx is ~25% low. Extraction is probably
   somewhat overestimated, by the same rule in both scans.
-  - **Fix:** `--max-flight`, on for new runs, off here for consistency
-    (`docs/sanity-checks-cyl3d.md`).
-- **BaF⁺ treated as Ba⁺ for collisions:** the F atom is ignored (about +16–22% stopping
+  Fix: `--max-flight`, on for new runs, off here for consistency
+  (`docs/sanity-checks-cyl3d.md`).
+- BaF⁺ treated as Ba⁺ for collisions: the F atom is ignored (about +16–22% stopping
   at keV would come from it), and collision-induced dissociation above ~56 eV lab is
   not modelled.
-- **Coarse fixed lattice at high flow:** the lattice-convergence test is still on the
+- Coarse fixed lattice at high flow: the lattice-convergence test is still on the
   TODO list.

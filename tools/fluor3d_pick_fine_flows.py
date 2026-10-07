@@ -2,11 +2,10 @@
 """Pick 1-SCCM fill-in flows around the BaF+ extraction peak of the
 fluor-cell-3d scan.
 
-The peak is taken on the THERMALIZED extraction fraction (energy-dependent
-cross section, < 0.1 eV at box exit), over flows >= 4 SCCM. At 1-2 SCCM the
-"extracted" ions are hot ones that fly straight through, which isn't a beam.
-Prints the integer flows strictly between the peak's two neighbouring
-measured flows that haven't been run yet, capped at MAX nearest the peak.
+Peak of the thermalized extraction fraction (energy-dependent cross section,
+< 0.1 eV at box exit) over flows >= 4 SCCM; at 1-2 SCCM the "extracted" ions
+are hot ones flying straight through. Prints unrun integer flows strictly
+between the peak's two measured neighbours, at most MAX, nearest first.
 
 Usage: python tools/fluor3d_pick_fine_flows.py [--max 8]
 """

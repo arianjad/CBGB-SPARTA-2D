@@ -1,13 +1,11 @@
-"""Sanity-check cell_fluor3d.surf: point/triangle counts match the header,
-all triangle indices are in range, no degenerate triangles, and the mesh is
-watertight (every real edge used by exactly 2 triangles -- free edges mean
-a leak/gap; a few non-manifold edges are EXPECTED here where multiple
-separate-but-touching CAD solids share a boundary line, e.g. the housing's
-own 12 box edges where 2-3 bolted-on plates meet it -- that's normal for a
-multi-part assembly, not a defect). Pure stdlib, no dependencies -- meant
-to be run on the HPC side too, without needing cadquery/OCCT.
+"""Sanity-check cell_fluor3d.surf: counts match the header, indices in range,
+no degenerate triangles, watertight (every edge used by exactly 2 triangles;
+free edges mean a leak). A few non-manifold edges are expected where touching
+CAD solids share a boundary line, e.g. the housing's box edges where 2-3
+bolted-on plates meet it. Stdlib only, so it runs on the cluster without
+cadquery.
 
-Run from this directory: python check_surf3d.py
+Usage (from this directory): python check_surf3d.py
 """
 import os
 import sys

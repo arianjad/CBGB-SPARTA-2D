@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 """Plots for the fluor-cell-3d BaF+ flow-rate scan (sealed cell):
 
-  OUT_extraction.png  -- extraction fraction vs flow (SCCM, log x) for the
-                         three cross-section conditions, 95% Wilson intervals
-  OUT_pumpout.png     -- one histogram per flow of the time transmitted ions
-                         take from injection to leaving through the outlet
-                         (energy-dependent condition)
-  OUT_energy.png      -- one histogram per flow of extracted ions' kinetic
-                         energy where they leave the box (x=0.2m, ~117mm past
-                         the outlet), energy-dependent condition
-  OUT_summary.csv     -- the numbers behind these
+  OUT_extraction.png  extraction fraction vs flow (SCCM, log x) for the
+                      three cross-section conditions, 95% Wilson intervals
+  OUT_pumpout.png     per flow, histogram of time from injection to leaving
+                      through the outlet (energy-dependent condition)
+  OUT_energy.png      per flow, histogram of extracted ions' KE at the box
+                      exit (x=0.2m, ~117mm past the outlet), energy-dependent
+                      condition
+  OUT_summary.csv     the numbers behind these
 
 Reads every RUNDIR/post/tracer_<cond>*.out, pooling all seed chunks
 (sbatch_fluor3d_scan_post.sh + sbatch_fluor3d_tracer_chunk.sh). Flows with
@@ -37,7 +36,7 @@ EXCLUDE = {127}   # dropped for the 500 eV sets: ions don't leave through the ou
 FLOWS_ALL = sorted({4} | {int(d[4:]) for d in os.listdir(f"{BASE}/fluor-scan") if d[4:].isdigit()})
 FLOWS = [f for f in FLOWS_ALL if f not in EXCLUDE]
 UNDER_RESOLVED = {f for f in FLOWS if f >= 10}   # Ne mean free path < half the 0.41mm chamber cell
-CONDSETS = {  # (file tag, label, categorical slot colour -- reference palette slots 1-3); first = primary
+CONDSETS = {  # (file tag, label, colour: palette slots 1-3); first = primary
     "edep": [
         ("edep", "energy-dependent σ", "#2a78d6"),
         ("const2e-18", "constant σ = 2.0e-18 m²", "#eb6834"),

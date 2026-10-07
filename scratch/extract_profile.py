@@ -1,8 +1,6 @@
-"""Extract the near-aperture on-axis profile (xc,yc,nrho,u,t for cells in a
-band around the aperture) from one converged run's field.grid, using the
-fast tail-only reader (no full-file read needed since we already verified
-convergence). Saves a small CSV for later x-position scanning without
-re-reading the multi-GB source file each time.
+"""Dump on-axis cells near the aperture (xc,yc,nrho,u,t) from a converged
+field.grid to a small CSV for x-position scans, so the multi-GB file is read
+once. Fast tail-only reader (run is already known to be converged).
 
 Usage: python3 extract_profile.py <sccm> <run_dir> <out_csv>
 """

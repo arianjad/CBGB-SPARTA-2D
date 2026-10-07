@@ -1,9 +1,5 @@
-# Resume for in.ne_fluor3d_ports_run (re-issues the per-cell volume weighting).
-# Resume for in.ne_fluor3d_sealed_run (averaging window = DUMPFREQ; restart on a window edge).
-#
-# Resume in.ne_fluor3d_run from a SPARTA restart file after a job was killed
-# (walltime limit, node failure) before finishing. Mirrors
-# cases/takahashi-3d/in.he_takahashi_3d_resume.
+# Resume in.ne_fluor3d_ports_run from a restart file (re-issues the per-cell
+# volume weighting). Averaging window = DUMPFREQ; restart on a window edge.
 # Pass RESTARTFILE (e.g. restart.chunk3), MDOT, FILLN, FNUM, DT, DUMPFREQ,
 # CHECKPOINT_STEPS, and NCHUNKS (remaining chunks to run) with -var.
 # field.grid/moleculein.out/moleculeout.out are appended to, not overwritten.

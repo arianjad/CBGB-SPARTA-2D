@@ -1,7 +1,5 @@
-"""Extract forward velocity (u) and temperature (T) ~3cm downstream of the
-aperture exit from one converged run's field.grid, using the fast tail-only
-reader. Compute the Takahashi et al. Eq.(5)-style divergence estimate purely
-from the He buffer gas's own velocity/temperature field:
+"""He u and T ~3cm downstream of the aperture exit (fast tail-only reader),
+and the Takahashi et al. Eq.(5) divergence estimate from the He field alone:
   dv_perp (FWHM) = 2*sqrt(2*ln2) * sqrt(kB*T/m_He)   [Maxwellian one-component FWHM]
   dtheta = 2*arctan(dv_perp / (2*u))                  [Eq. 5]
 Appends one row (sccm, u, T, dv_perp, dtheta_deg) to a CSV.
@@ -27,9 +25,8 @@ m_he = 6.6464731e-27
 path = os.path.join(run_dir, "field.grid")
 d = average_tail(path, 0.25, fast_tail=True)
 x = d["xc"]; y = d["yc"]
-# ~3cm downstream of the aperture exit (x=0.0535), matching the paper's Fig.6
-# measurement convention ("reported values are measured 3 cm from the exit
-# aperture"), on-axis.
+# on-axis, 3cm past the exit (x=0.0535), as in the paper's Fig.6 ("reported
+# values are measured 3 cm from the exit aperture")
 x_target = 0.0535 + 0.03
 mask = (x > x_target - 0.0015) & (x < x_target + 0.0015) & (y < 0.001)
 idx = np.where(mask)[0]

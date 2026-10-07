@@ -1,7 +1,7 @@
 # fluor-cell-3d BaF+ tracer: bugs found and validated results
 
-> **SUPERSEDED (2026-09-23): the neon field these results were traced
-> against was wrong.** The surf file had the optical-window slot in the
+> SUPERSEDED (2026-09-23): the neon field these results were traced
+> against was wrong. The surf file had the optical-window slot in the
 > housing's top face left open, and ~70% of the injected neon escaped through
 > it. The chamber sat at ~2e20 m^-3 instead of ~5.6e21. Everything below the
 > "Sealed-window rerun" section was computed on that leaky field and is kept
@@ -21,14 +21,14 @@ port axis (y = z = 19.05mm), in a |dy|,|dz| < 38mm window:
 | 26.5-117.5mm past outlet | 2.00 | 2.46 | 0.92 | 0.91 | +9.4 m/s |
 | behind the back port | 3.10 | 3.86 | 0.82 | 0.81 | +28.7 m/s |
 
-**Ruled out: inlet placement.** Two controlled Takahashi-cell 3D runs gave a
+Ruled out: inlet placement. Two controlled Takahashi-cell 3D runs gave a
 symmetric plume (+z/-z within ~1-5%, the same as their +y/-y controls):
 
 - `cases/takahashi-3d-offset`: inlet tube axis shifted 3mm off the cell axis.
 - `cases/takahashi-3d-side`: inlet tube entering through the side wall from
   -z, like this cell's gas inlet.
 
-**Found: an open slot in the top face.** `gen_fluor3d.py` excludes the
+Found: an open slot in the top face. `gen_fluor3d.py` excludes the
 optical window (#1/#4) on the assumption that the top face is continuous. It
 isn't. A 30 x 7mm slot (x 42-72mm, y 15.4-22.6mm, 229mm^2) runs from z=38.1
 down to the chamber ceiling (z~34.3). Evidence of the leak:
@@ -68,11 +68,11 @@ The run took 600000 steps (0.3 s), as six ~9-minute mit_quicktest jobs
 
 ### Sealed neon field (averaged over steps 450000-600000)
 
-- **Chamber:** <n> = 5.63e21 m^-3, uniform to <1% with height (aperture-law
+- Chamber: <n> = 5.63e21 m^-3, uniform to <1% with height (aperture-law
   estimate: 5.4e21); T = 23.0 K; all mean velocities < 0.3 m/s.
-- **Settling:** total nrho drifts < 1% over the last 250000 steps.
-- **Above the housing top:** 4e14 m^-3, down from 3.5e18.
-- **Averaging caveat:** a resumed job re-dumps its starting step with an
+- Settling: total nrho drifts < 1% over the last 250000 steps.
+- Above the housing top: 4e14 m^-3, down from 3.5e18.
+- Averaging caveat: a resumed job re-dumps its starting step with an
   empty average. Drop duplicate timesteps before tail-averaging; leaving them
   in lowered averages by ~20%.
 
@@ -95,7 +95,7 @@ conditions from handoff section 3 (commit 5bca552):
 
 | Cross section | Transmitted | Lost (back out inlet) | Wall hit | Mean collisions |
 |---|---|---|---|---|
-| energy-dependent (default: 2.0e-18 falling as 1/v to a 1.5e-19 floor) | **0.8%** (8) | 0.1% | 99.1% | 10640 |
+| energy-dependent (default: 2.0e-18 falling as 1/v to a 1.5e-19 floor) | 0.8% (8) | 0.1% | 99.1% | 10640 |
 | constant 2.0e-18 | 0.0% | 35.1% | 64.9% | 3924 |
 | constant 1.5e-19 | 0.3% (3) | 0.0% | 99.7% | 50 |
 
@@ -106,11 +106,11 @@ entry. It then diffuses to a wall (the tracer treats a wall hit as a loss)
 long before the near-stagnant gas (< 0.3 m/s) can carry it to the 3.175mm
 outlet. By condition:
 
-- **Energy-dependent:** wall hits are spread along x = 48-77mm, with a pile
+- Energy-dependent: wall hits are spread along x = 48-77mm, with a pile
   on the end wall around the outlet channel at x = 77.2mm.
-- **Constant 2.0e-18:** ions stop right at the entrance (wall hits at
+- Constant 2.0e-18: ions stop right at the entrance (wall hits at
   x ~ 31-33mm), and 35% diffuse back out the inlet channel.
-- **Constant 1.5e-19:** ions coast most of the way and then strike the end
+- Constant 1.5e-19: ions coast most of the way and then strike the end
   wall around the outlet.
 
 Thermalization check: ions with > 1000 collisions leave at a mean 74 m/s
@@ -126,7 +126,7 @@ Scripts used (classifier, half-space asymmetry analysis) are in
 
 ### Setup
 
-**Neon.** 18 flows from 1 to 58 SCCM, each an independent sealed-cell run of
+Neon. 18 flows from 1 to 58 SCCM, each an independent sealed-cell run of
 0.3 s simulated.
 - Same deck as 4 SCCM (`in.ne_fluor3d_sealed_run`, 8x8x8-refined chamber at
   0.41mm).
@@ -139,10 +139,10 @@ Scripts used (classifier, half-space asymmetry analysis) are in
   58 SCCM).
 - 127 SCCM was also run but is excluded: ions don't leave via the outlet
   there.
-- **From 10 SCCM up the chamber grid is coarser than twice the Ne mean free
-  path**, so the port flow there is approximate.
+- From 10 SCCM up the chamber grid is coarser than twice the Ne mean free
+  path, so the port flow there is approximate.
 
-**Tracer.** 500 eV BaF+ injected at the molecule-inlet port into each frozen
+Tracer. 500 eV BaF+ injected at the molecule-inlet port into each frozen
 field (the last 20 ms time-averaged).
 - The three cross-section conditions from handoff section 3 (commit
   5bca552). The table below is the energy-dependent default.
@@ -151,7 +151,7 @@ field (the last 20 ms time-averaged).
 - Ions were added until >= 150 were extracted per flow, and >= 600 across
   15-21 SCCM (+-8% at 95%).
 
-**Thermalized** means < 0.1 eV kinetic energy at the box exit. That cut sits
+Thermalized means < 0.1 eV kinetic energy at the box exit. That cut sits
 in an empty gap between two populations:
 - Gas-entrained cold ions, 10-30 meV. The lab-frame energy is mostly the
   ~120-175 m/s forward drift in the neon jet.
@@ -169,8 +169,8 @@ in an empty gap between two populations:
 | 10 | 11000 | 1.45% (1.24-1.69) | 1.45% | 1% | 32.7 ms | 19 meV |
 | 15 | 24600 | 2.60% (2.41-2.80) | 2.60% | 6% | 48.0 ms | 22 meV |
 | 16 | 18800 | 3.21% (2.96-3.47) | 3.21% | 7% | 47.5 ms | 22 meV |
-| **17** | 18800 | **3.48% (3.23-3.76)** | 3.48% | 8% | 46.7 ms | 22 meV |
-| **18** | 18800 | **3.43% (3.17-3.70)** | 3.43% | 12% | 51.0 ms | 23 meV |
+| 17 | 18800 | 3.48% (3.23-3.76) | 3.48% | 8% | 46.7 ms | 22 meV |
+| 18 | 18800 | 3.43% (3.17-3.70) | 3.43% | 12% | 51.0 ms | 23 meV |
 | 19 | 18800 | 3.30% (3.05-3.56) | 3.30% | 16% | 51.0 ms | 23 meV |
 | 20 | 19200 | 3.20% (2.96-3.46) | 3.20% | 21% | 50.2 ms | 23 meV |
 | 21 | 26700 | 2.45% (2.27-2.64) | 2.45% | 25% | 55.5 ms | 24 meV |
@@ -180,30 +180,30 @@ in an empty gap between two populations:
 | 30 | 30850 | 0.53% (0.46-0.62) | 0.53% | 72% | 70.3 ms | 25 meV |
 | 58 | 10200 | 0.00% (0.00-0.04) | 0.00% | 99% | - | - |
 
-### Reading it
+### Notes
 
-- **1-2 SCCM:** the "extraction" is hot ions coasting straight through in
+- 1-2 SCCM: the "extraction" is hot ions coasting straight through in
   microseconds, not a beam.
-- **From 4 SCCM up:** every extracted ion leaves thermalized, carried out by
+- From 4 SCCM up: every extracted ion leaves thermalized, carried out by
   the neon flow over milliseconds.
-- **Peak:** extraction rises from ~1% (4-8 SCCM) to a broad maximum of
+- Peak: extraction rises from ~1% (4-8 SCCM) to a broad maximum of
   3.2-3.5% at 16-20 SCCM, highest at 17-18 SCCM (statistically tied).
-- **Past the peak:** extraction falls steeply. The outflowing neon increasingly
+- Past the peak: extraction falls steeply. The outflowing neon increasingly
   blows the ions back out the molecule-inlet port: 8% at 17 SCCM, 72% at 30,
   99% at 58. So the optimum is set by that competition, not by diffusion to
   the walls.
-- **21 SCCM** sits ~2 sigma below 20 and 22. It is likely a statistical or
+- 21 SCCM sits ~2 sigma below 20 and 22. It is likely a statistical or
   frozen-field fluctuation rather than structure.
-- **Pump-out time** (injection to outlet) grows from ~4 ms at 4 SCCM to
+- Pump-out time (injection to outlet) grows from ~4 ms at 4 SCCM to
   ~50 ms at the peak.
 
-**Figures** (not in git; results/ is ignored):
+Figures (not in git; results/ is ignored):
 - results/figures/fluor3d_scan_{extraction,pumpout,energy}.png and
   _summary.csv, from `tools/plot_fluor3d_scan.py`.
 - A trajectory GIF of 40 ions at 17 SCCM in results/figures/fluor3d_traj/,
   from `tools/render_fluor3d_trajectories.py`.
 
-**Pipeline** (in tools/wsl/):
+Pipeline (in tools/wsl/):
 - sbatch_fluor3d_scan.sh: neon run, self-chaining, preemption-safe.
 - sbatch_fluor3d_scan_post.sh: asymmetry check + field freeze.
 - sbatch_fluor3d_tracer_chunk.sh.
@@ -211,13 +211,13 @@ in an empty gap between two populations:
 
 ### Computed cross-section table (2026-09-27, commit 55b5f6b)
 
-**Setup.**
+Setup:
 - Same frozen neon fields, re-traced with the new tracer default
   `--sigma-model table`: the computed BaF+-Ne sigma_t(E_cm) in
   tracer/data/bafplus_ne_sigma_tracer.tsv.
 - Three variants: central (the main condition), low and high. Low and high
   bracket the short-range wall, which matters above ~1 eV.
-- Flows: 5, 10, 15 and 20 SCCM as requested, plus central at 25 and 30 SCCM
+- Flows: 5, 10, 15 and 20 SCCM, plus central at 25 and 30 SCCM
   to locate the peak.
 - Statistics: >= 300 extracted ions per flow for central, >= 150 for low
   and high.
@@ -229,15 +229,15 @@ in an empty gap between two populations:
 | 5 | 3.20% (2.9-3.6; 320/10000) | 5.89% | 2.11% | 1.02% | 0% | hot ions, us |
 | 10 | 4.58% (4.2-5.0; 550/12000) | 6.90% | 3.02% | 1.45% | 0% | 17.7 ms |
 | 15 | 6.48% (5.8-7.2; 311/4800) | 8.67% | 4.25% | 2.60% | 1% | 39.2 ms |
-| 20 | **8.62% (7.9-9.5; 414/4800)** | 12.58% | 6.65% | 3.20% | 5% | 43.9 ms |
-| 25 | **8.56% (7.7-9.5; 308/3600)** | - | - | 2.09% | 8% | 50.6 ms |
+| 20 | 8.62% (7.9-9.5; 414/4800) | 12.58% | 6.65% | 3.20% | 5% | 43.9 ms |
+| 25 | 8.56% (7.7-9.5; 308/3600) | - | - | 2.09% | 8% | 50.6 ms |
 | 30 | 5.60% (4.9-6.4; 224/4000) | - | - | 0.53% | 24% | 65.6 ms |
 
-**What changes relative to edep:**
-- **Extraction is 2-4x higher at every flow.** The central table peaks at
+Compared with edep:
+- Extraction is 2-4x higher at every flow. The central table peaks at
   ~8.6% over 20-25 SCCM, vs edep's ~3.5% at 17-18 SCCM, so the peak moves
   up in flow.
-- **Mechanism: stopping depth.** sigma_t is much smaller than edep at high
+- Mechanism: stopping depth. sigma_t is much smaller than edep at high
   energy (4.9e-20 m^2 at 500 eV lab, vs edep's 1.5e-19 floor), so injected
   ions stop deeper in the chamber: ~14 vs 8.8 mm in the commit's synthetic
   check.
@@ -247,19 +247,19 @@ in an empty gap between two populations:
   - The low variant (weakest short-range wall) penetrates deepest and
     extracts the most (12.6% at 20 SCCM). The high variant extracts least
     (6.7%).
-- **The thermal end is the same in both models** (2.0e-18 m^2), so from
-  10 SCCM up essentially all extracted ions leave thermalized in every
+- The thermal end is the same in both models (2.0e-18 m^2), so from
+  10 SCCM up nearly all extracted ions leave thermalized in every
   variant.
-- **At 5 SCCM only 35% of central-table "extracted" ions are thermalized**
+- At 5 SCCM only 35% of central-table "extracted" ions are thermalized
   (1.1% of injected). The rest coast straight through while still hot: the
   smaller high-energy sigma lets more ions stay fast at low density.
   Thermalized-only fractions at 5 SCCM: low 0.50%, central 1.12%,
   high 1.74%.
-- **The spread is set by the short-range wall:** central 8.6%, bracketed by
+- The spread is set by the short-range wall: central 8.6%, bracketed by
   6.7-12.6% at 20 SCCM. It is not set by statistics. No BaF+-Ne cross
   section has been measured; Ba+ stands in for BaF+.
 
-**Figures:**
+Figures:
 - results/figures/fluor3d_scan_table_{extraction,pumpout,energy}.png, from
   `python tools/plot_fluor3d_scan.py --set table`.
 - The extraction plot shows the three table variants, the central
@@ -267,7 +267,7 @@ in an empty gap between two populations:
 
 ### Thermal-injection test (2026-09-27)
 
-**Setup.** BaF+ is injected already at the neon temperature: a 23 K
+Setup: BaF+ is injected already at the neon temperature: a 23 K
 Maxwellian, no 500 eV beam (`--vx 0 -T 23`).
 - Cross section: a single constant sigma = 1.93e-18 m^2.
 - Neon fields: the same frozen 5-30 SCCM fields.
@@ -286,33 +286,32 @@ Maxwellian, no 500 eV beam (`--vx 0 -T 23`).
 | 15 | 12.62% (11.4-14.0) | 30 ms | 3.58% | 4% | 0% (<0.05) | 100% | 6.48% | 2.60% |
 | 20 | 22.96% (21.4-24.6) | 29 ms | 8.28% | 4% | 0% (<0.05) | 100% | 8.62% | 3.20% |
 | 25 | 26.83% (25.1-28.6) | 32 ms | 10.42% | 2% | 0% (<0.05) | 100% | 8.56% | 2.09% |
-| 30 | **34.30% (32.3-36.4)** | 37 ms | 10.65% | 5% | 0% (<0.06) | 100% | 5.60% | 0.53% |
+| 30 | 34.30% (32.3-36.4) | 37 ms | 10.65% | 5% | 0% (<0.06) | 100% | 5.60% | 0.53% |
 
-**Reading it:**
-- **Starting at the inlet, nothing gets out.**
+- Starting at the inlet, nothing gets out.
   - The neon leaving through the molecule-inlet port sweeps a thermal ion
     straight back out, within ~0.1 ms.
   - A 500 eV ion only escapes this because it coasts several mm into the
     chamber before cooling.
-- **So the injection depth, not the cross section, dominates extraction.**
+- So the injection depth, not the cross section, dominates extraction.
   - A thermal ion 10mm in behaves much like the 500 eV edep/table runs:
     about 8-10% at 20-30 SCCM.
   - A thermal ion at the chamber centre is extracted far more often: 23% at
     20 SCCM and still rising to 34% at 30 SCCM, with no peak in this range.
   - It starts away from the inlet backflow and close to the outlet flow.
-- **Why the 500 eV curves peak:** the peak at ~17-25 SCCM comes from ions
+- Why the 500 eV curves peak: the peak at ~17-25 SCCM comes from ions
   that stop near the inlet being blown back out at high flow. Ions
   starting deeper don't see that loss, so their extraction keeps climbing
   with flow as diffusion to the walls slows.
-- **Pump-out times are shorter than the 500 eV runs** (16-37 ms, vs
+- Pump-out times are shorter than the 500 eV runs (16-37 ms, vs
   ~45-65 ms), because the ions start closer to the outlet.
 
-**Figures:** results/figures/fluor3d_scan_thermal_{extraction,pumpout,energy}.png,
+Figures: results/figures/fluor3d_scan_thermal_{extraction,pumpout,energy}.png,
 from `python tools/plot_fluor3d_scan.py --set thermal`.
 
 ### Thermal injection deeper in, and at higher flow (2026-09-29 overnight)
 
-**Setup.** Same thermal condition as above: a 23 K Maxwellian with constant
+Setup: Same thermal condition as above: a 23 K Maxwellian with constant
 sigma = 1.93e-18 m^2, on the port axis. Two changes:
 - Two more start points. The chamber spans x = 31.75 mm (inlet channel end)
   to 77.22 mm (outlet aperture plane: a 3.175 mm hole on the same axis).
@@ -330,7 +329,7 @@ sigma = 1.93e-18 m^2, on the port axis. Two changes:
     each ion takes minutes there) and at 50 SCCM (230).
   - Earlier points keep their counts from the 2026-09-27 run.
 
-**Extracted % (95% Wilson interval); median pump-out time for extracted ions:**
+Extracted % (95% Wilson interval); median pump-out time for extracted ions:
 
 | Flow (SCCM) | 2 mm before outlet | 3/4 through | centre | 10 mm in |
 |---|---|---|---|---|
@@ -351,9 +350,8 @@ The 40-50 SCCM points sit between the 30 and 58 SCCM values, within their
 error bars. Centre at 45 (49.2%) vs 40 (50.9%) is a flat step inside the
 noise, not a dip.
 
-**Reading it:**
-- **No extraction peak up to 127 SCCM for a thermal ion, from any start
-  point.** Every curve rises with flow, or saturates:
+- No extraction peak up to 127 SCCM for a thermal ion, from any start
+  point. Every curve rises with flow, or saturates:
   - Near the outlet: ~100% from 58 SCCM up.
   - 10mm in: flat at ~22% between 58 and 127 SCCM.
   - This matches the earlier reading. The 500 eV peak near 17-25 SCCM comes
@@ -361,24 +359,24 @@ noise, not a dip.
     ion that starts downstream of that backflow only gains from more flow:
     diffusion to the walls slows, and the outflow toward the outlet gets
     stronger.
-- **Start point matters more than flow.** At 20 SCCM, extraction runs 87%,
+- Start point matters more than flow. At 20 SCCM, extraction runs 87%,
   47%, 23% and 8% going from 2mm before the outlet back to 10mm in.
   - Wall losses dominate everywhere except near the outlet.
   - Only the 10mm-in start loses ions back out of the inlet: 2-5% at
     5-30 SCCM, 4-7% at 40-58 and 21% at 127. That is what flattens its
     curve at the top.
-- **Pump-out time is set by distance, not flow.**
+- Pump-out time is set by distance, not flow.
   - 2mm before the outlet: ~0.55 ms at every flow.
   - 3/4 through: 6-8 ms.
   - Centre: 25-37 ms.
   - 10mm in: 50-75 ms.
-- **Caveat.** Everything at or above ~10 SCCM is on the 0.41mm chamber grid,
+- Caveat: everything at or above ~10 SCCM is on the 0.41mm chamber grid,
   which is coarser than the neon mean free path there (shaded in the plot).
   At 23 SCCM and up it is well under-resolved, and 127 SCCM is only a
   qualitative bracket. The port jets are approximate, but the stagnant
   chamber state is fine.
 
-**Pipeline notes.**
+Pipeline notes:
 - sbatch_fluor3d_tracer_chunk.sh gained the `-x66` and `-x75` start points.
 - fluor3d_stats_driver.sh gained env options:
   - TOPT: several ';'-separated option sets, rotated per chunk.
@@ -395,14 +393,14 @@ noise, not a dip.
 
 ### Injection energy scan (750 eV, 1 keV; edep model) (2026-09-29)
 
-**Setup.**
+Setup:
 - Injection: the same beam injection as the original scan: along +x from
   the molecule-inlet port face (x = 30.48 mm), on the port axis, at
   750 eV (30.4 km/s) and 1 keV (35.1 km/s).
   - COND `edep-e750` and `edep-e1000`: sbatch_fluor3d_tracer_chunk.sh now
     takes an energy suffix `-e<eV>` on beam conditions.
 - Cross section: the previous energy-dependent model (`--sigma-model
-  edep`), at the user's request, rather than the computed table.
+  edep`) rather than the computed table.
   - The model is sigma = max(2e-18 x v_ref/v_coll, 1.5e-19) m^2.
   - It is at its 1.5e-19 floor for relative speeds above ~13x thermal
     (~3.5 eV lab for BaF+). So sigma is constant through the whole
@@ -415,15 +413,15 @@ noise, not a dip.
 - Statistics: at least 300 extracted per point, or 10,000 ions traced
   (5, 10, 25 and 30 SCCM hit the cap).
 
-**Extracted % (95% Wilson interval); median pump-out time; % blown back out
-of the inlet:**
+Extracted % (95% Wilson interval); median pump-out time; % blown back out
+of the inlet:
 
 | Flow (SCCM) | 500 eV | 750 eV | 1 keV |
 |---|---|---|---|
 | 5 | 1.02% (0.89-1.17); 8 ms; 0% | 0.99% (0.82-1.19); 10 ms; 0% | 0.92% (0.76-1.10); 9 ms; 0% |
 | 10 | 1.45% (1.24-1.69); 33 ms; 1% | 1.55% (1.34-1.80); 33 ms; 1% | 1.81% (1.57-2.07); 32 ms; 1% |
 | 15 | 2.60% (2.41-2.80); 48 ms; 6% | 2.93% (2.62-3.27); 46 ms; 5% | 2.91% (2.60-3.25); 48 ms; 4% |
-| 20 | **3.20% (2.96-3.46)**; 50 ms; 21% | **3.63% (3.26-4.03)**; 49 ms; 17% | **3.82% (3.44-4.24)**; 49 ms; 15% |
+| 20 | 3.20% (2.96-3.46); 50 ms; 21% | 3.63% (3.26-4.03); 49 ms; 17% | 3.82% (3.44-4.24); 49 ms; 15% |
 | 25 | 2.09% (1.81-2.41); 54 ms; 42% | 2.59% (2.31-2.91); 53 ms; 36% | 2.57% (2.28-2.89); 52 ms; 32% |
 | 30 | 0.53% (0.46-0.62); 70 ms; 72% | 0.75% (0.60-0.94); 70 ms; 65% | 0.98% (0.81-1.19); 74 ms; 62% |
 
@@ -431,12 +429,11 @@ Every extracted ion leaves thermalized (< 0.1 eV at exit), at every
 energy and flow, so the thermalized-only curve is the same as the total.
 The rest of the ions (not extracted, not blown back) end on the walls.
 
-**Reading it:**
-- **The peak stays at 20 SCCM for all three energies.** It rises only
+- The peak stays at 20 SCCM for all three energies. It rises only
   modestly with energy: 3.2% (500 eV), 3.6% (750 eV), 3.8% (1 keV).
   - 1 keV vs 500 eV at 20 SCCM is a 1.2x gain, just outside the error bars.
   - 750 eV and 1 keV overlap within their error bars at most flows.
-- **Higher energy helps mainly at high flow, by cutting inlet backflow.**
+- Higher energy helps mainly at high flow, by cutting inlet backflow.
   At 30 SCCM, blow-back falls from 72% to 62% and extraction nearly
   doubles (0.53% -> 0.98%).
   - This fits the thermal-injection result: the deeper an ion stops, the
@@ -450,15 +447,15 @@ The rest of the ions (not extracted, not blown back) end on the walls.
     - Doubling the energy moves the stopping point a little deeper, but
       nowhere near the chamber centre, where thermal starts gave 23-34% at
       20-30 SCCM.
-- **At 5 SCCM energy makes no difference (~1%).** Wall losses dominate
+- At 5 SCCM energy makes no difference (~1%). Wall losses dominate
   there, and nothing is blown back out.
-- **Pump-out time doesn't depend on energy** (~50 ms at the peak). It is
+- Pump-out time doesn't depend on energy (~50 ms at the peak). It is
   set by where the ion thermalizes and the diffusion from there.
-- **Caveat:** flows of 10 SCCM and up are on the under-resolved 0.41 mm
+- Caveat: flows of 10 SCCM and up are on the under-resolved 0.41 mm
   chamber grid (shaded in the plot), so treat the port-flow details as
   approximate.
 
-**Where the ions stop (20 SCCM, 40 ions each, seed 300).** The stopping
+Where the ions stop (20 SCCM, 40 ions each, seed 300). The stopping
 point is the first place an ion drops below 1 eV. Depth is measured along
 the port axis past the port face (x = 30.48 mm). The chamber starts
 1.3 mm in, and its centre is 24 mm in.
@@ -473,11 +470,11 @@ the port axis past the port face (x = 30.48 mm). The chamber starts
 - A BaF+ ion loses on average 2mM/(m+M)^2 = 20% of its energy per Ne
   collision. So the number of collisions to stop grows only as ln(E0).
   Doubling the energy adds ~3 collisions, which matches the counts above.
-- **edep:** sigma is pinned at its 1.5e-19 floor, so every free path is the
+- edep: sigma is pinned at its 1.5e-19 floor, so every free path is the
   same (~0.4 mm here). The 3 extra collisions add under 1 mm, so 500 eV to
   1 keV all stop ~7 mm in, the same within noise. That is why the three
   edep curves hardly differ.
-- **Computed table:** sigma is ~3.7x smaller at these energies (4-6e-20)
+- Computed table: sigma is ~3.7x smaller at these energies (4-6e-20)
   and falls with speed. Fast ions fly farther per collision, stop about
   twice as deep, and the depth does grow with energy (~+25% from 500 eV
   to 1 keV).
@@ -485,13 +482,13 @@ the port axis past the port face (x = 30.48 mm). The chamber starts
   thermal start, and the two extraction curves agree (8-10% at 20-30
   SCCM).
 
-**Figures:** results/figures/fluor3d_scan_energy_{extraction,pumpout,energy}.png
+Figures: results/figures/fluor3d_scan_energy_{extraction,pumpout,energy}.png
 and _summary.csv, from `python tools/plot_fluor3d_scan.py --set energy`.
 The histograms show the 1 keV condition.
 
 ### keV injection at 20 SCCM (extended computed table) (2026-09-29 night)
 
-**Setup.**
+Setup:
 - Cross section: the computed BaF+-Ne table, extended to ~19 keV lab
   (commit 41e1cc2).
   - Q1 was previously computed only up to E_cm = 1e6 K (~750 eV lab) and
@@ -515,25 +512,24 @@ The histograms show the 1 keV condition.
 | 750 eV | 13.4 mm (10.0-16.6) | 0/40 | 9.7% (8.8-10.7) | 9.7% | 3.0% | 42 ms |
 | 1 keV | 14.3 mm (11.1-18.1) | 0/40 | 11.4% (10.3-12.6) | 11.4% | 1.5% | 40 ms |
 | 2 keV | 20.1 mm (14.5-25.8) | 0/40 | 15.2% (13.7-16.8) | 15.2% | 0.5% | 33 ms |
-| 5 keV | 25.8 mm (18.0-33.8) | 3/40 | **20.2% (18.8-21.7)** | **19.4%** | 0.0% | 17 ms |
+| 5 keV | 25.8 mm (18.0-33.8) | 3/40 | 20.2% (18.8-21.7) | 19.4% | 0.0% | 17 ms |
 | 10 keV | 34.6 mm (25.3-43.4) | 10/40 | 18.3% (16.9-19.8) | 14.7% | 0.0% | 7.8 ms |
 
 For comparison, the previous edep model at 500 eV / 750 eV / 1 keV: stop
 depth ~7 mm at all three, extraction 3.2 / 3.6 / 3.8%.
 
-**Reading it:**
-- **With realistic cross sections, energy does push the ions deeper.**
+- With realistic cross sections, energy does push the ions deeper.
   Depth grows roughly as sqrt(E) (sigma ~ 1/v makes each free path grow
   with speed): 12 mm at 500 eV, 20 mm at 2 keV, 26 mm at 5 keV, 35 mm at
   10 keV.
-- **Extraction follows the stopping depth**, as the thermal-injection
+- Extraction follows the stopping depth, as the thermal-injection
   runs predicted. At 20 SCCM a thermal start gave:
   - 8.3% at 11 mm (500 eV lands there: 8.6%);
   - 23% at the centre, 24 mm (5 keV lands at ~26 mm: 20%);
   - 47% at 35 mm.
-- **The best is ~5 keV: ~20% extracted, 19% thermalized.** That's 2.3x the
+- The best is ~5 keV: ~20% extracted, 19% thermalized. That's 2.3x the
   500 eV table result and ~6x the old edep peak.
-- **Above ~5 keV, ions start overshooting.**
+- Above ~5 keV, ions start overshooting.
   - At 10 keV, a quarter of the tracked ions reach a wall or the outlet
     before slowing below 1 eV.
   - About 3.6% of injected ions leave through the outlet still hot.
@@ -541,54 +537,54 @@ depth ~7 mm at all three, extraction 3.2 / 3.6 / 3.8%.
     (35 mm) sits where a thermal start gives 47%.
   - The wide spread in depth (p90 at 43 mm, almost at the outlet wall)
     costs more than going deeper gains.
-- **Inlet backflow goes away above ~2 keV** (0.5% or less). It had been
+- Inlet backflow goes away above ~2 keV (0.5% or less). It had been
   the main loss mechanism at 500 eV with the edep model.
-- **Pump-out gets faster with energy** (44 ms -> 17 ms at 5 keV) because
+- Pump-out gets faster with energy (44 ms -> 17 ms at 5 keV) because
   the ions stop closer to the outlet.
 
-**Caveats:**
-- **Electronic stopping is not modeled.** A Lindhard-Scharff-Schiott
+Caveats:
+- Electronic stopping is not modeled. A Lindhard-Scharff-Schiott
   estimate for Ba in Ne puts it at ~30-50% of nuclear stopping at 1-10 keV.
   It would shorten these ranges, pushing the best energy somewhat higher
   than 5 keV.
-- **BaF+ dissociation in keV collisions is not modeled.** CM energies reach
+- BaF+ dissociation in keV collisions is not modeled. CM energies reach
   ~1 keV at 10 keV injection, far above the molecular bond energy, so hard
   collisions could break the molecule or heat it internally.
-- **The grid is under-resolved at 20 SCCM** (the 0.41 mm chamber cells are
+- The grid is under-resolved at 20 SCCM (the 0.41 mm chamber cells are
   coarser than the neon mean free path).
-- **Stopping depths come from 40 ions each** (~+-1 mm statistical). For
+- Stopping depths come from 40 ions each (~+-1 mm statistical). For
   example, 500 eV gave 12.3 mm and 11.8 mm in two runs with the same table.
 
-**Figure:** results/figures/fluor3d_20sccm_energy_table.png, from
+Figure: results/figures/fluor3d_20sccm_energy_table.png, from
 `python tools/plot_fluor3d_energy20.py`. Its stop-depth input is
 results/figures/fluor3d_20sccm_stopdepth.csv, which holds the table above.
 
 ### Flow scan at 2 and 5 keV (computed table) (2026-09-30 night)
 
-**Setup.**
+Setup:
 - Same injection and extended table as the 20 SCCM keV section above,
   at 2 keV and 5 keV, over every frozen field from 5 to 58 SCCM.
 - The 500 eV table scan (5-30 SCCM) is the reference.
 - Statistics: at least 300 extracted per point, except 2 keV at 58 SCCM
   (150 extracted).
 
-**Per flow: all extracted / thermalized (95% CI) / blown back out of the
-inlet / median pump-out time.**
+Per flow: all extracted / thermalized (95% CI) / blown back out of the
+inlet / median pump-out time.
 
 | Flow (SCCM) | 5 keV | 2 keV | 500 eV |
 |---|---|---|---|
-| 5 | 28.6% / **0.0% (0-0.1)** / 0% / <1 ms | 12.5% / **0.0% (0-0.1)** / 0% / <1 ms | 3.2% / **1.1% (0.9-1.3)** / 0% |
-| 10 | 10.5% / **1.5% (1.2-2.0)** / 0% / <1 ms | 7.8% / **5.9% (5.3-6.5)** / 0% / 4 ms | 4.6% / **4.6% (4.2-5.0)** / 0% / 18 ms |
-| 15 | 12.5% / **10.4% (9.4-11.5)** / 0% / 7 ms | 12.9% / **12.7% (11.6-13.9)** / 0% / 20 ms | 6.5% / **6.5% (5.8-7.2)** / 1% / 39 ms |
-| 20 | 20.2% / **19.4% (18.0-20.9)** / 0% / 17 ms | 15.2% / **15.2% (13.7-16.8)** / 0% / 33 ms | 8.6% / **8.6% (7.9-9.5)** / 5% / 44 ms |
-| 25 | 22.0% / **22.0% (19.9-24.2)** / 0% / 25 ms | 14.5% / **14.5% (13.2-16.0)** / 1% / 41 ms | 8.6% / **8.6% (7.7-9.5)** / 8% / 51 ms |
-| 30 | 22.4% / **22.4% (20.4-24.6)** / 1% / 40 ms | 14.7% / **14.7% (13.5-16.0)** / 4% / 54 ms | 5.6% / **5.6% (4.9-6.4)** / 24% / 66 ms |
-| 40 | 25.8% / **25.8% (23.6-28.1)** / 3% / 44 ms | 13.2% / **13.2% (12.0-14.6)** / 11% / 53 ms | - |
-| 45 | 23.0% / **23.0% (21.1-25.0)** / 4% / 52 ms | 13.2% / **13.2% (12.0-14.6)** / 16% / 59 ms | - |
-| 50 | 22.6% / **22.6% (20.7-24.6)** / 5% / 57 ms | 10.8% / **10.8% (9.6-12.1)** / 25% / 64 ms | - |
-| 58 | 18.1% / **18.1% (16.4-19.8)** / 14% / 71 ms | 5.8% / **5.8% (5.0-6.7)** / 49% / 82 ms | - |
+| 5 | 28.6% / 0.0% (0-0.1) / 0% / <1 ms | 12.5% / 0.0% (0-0.1) / 0% / <1 ms | 3.2% / 1.1% (0.9-1.3) / 0% |
+| 10 | 10.5% / 1.5% (1.2-2.0) / 0% / <1 ms | 7.8% / 5.9% (5.3-6.5) / 0% / 4 ms | 4.6% / 4.6% (4.2-5.0) / 0% / 18 ms |
+| 15 | 12.5% / 10.4% (9.4-11.5) / 0% / 7 ms | 12.9% / 12.7% (11.6-13.9) / 0% / 20 ms | 6.5% / 6.5% (5.8-7.2) / 1% / 39 ms |
+| 20 | 20.2% / 19.4% (18.0-20.9) / 0% / 17 ms | 15.2% / 15.2% (13.7-16.8) / 0% / 33 ms | 8.6% / 8.6% (7.9-9.5) / 5% / 44 ms |
+| 25 | 22.0% / 22.0% (19.9-24.2) / 0% / 25 ms | 14.5% / 14.5% (13.2-16.0) / 1% / 41 ms | 8.6% / 8.6% (7.7-9.5) / 8% / 51 ms |
+| 30 | 22.4% / 22.4% (20.4-24.6) / 1% / 40 ms | 14.7% / 14.7% (13.5-16.0) / 4% / 54 ms | 5.6% / 5.6% (4.9-6.4) / 24% / 66 ms |
+| 40 | 25.8% / 25.8% (23.6-28.1) / 3% / 44 ms | 13.2% / 13.2% (12.0-14.6) / 11% / 53 ms | - |
+| 45 | 23.0% / 23.0% (21.1-25.0) / 4% / 52 ms | 13.2% / 13.2% (12.0-14.6) / 16% / 59 ms | - |
+| 50 | 22.6% / 22.6% (20.7-24.6) / 5% / 57 ms | 10.8% / 10.8% (9.6-12.1) / 25% / 64 ms | - |
+| 58 | 18.1% / 18.1% (16.4-19.8) / 14% / 71 ms | 5.8% / 5.8% (5.0-6.7) / 49% / 82 ms | - |
 
-**Cross-section sensitivity (20 SCCM, 5 keV; thermalized):**
+Cross-section sensitivity (20 SCCM, 5 keV; thermalized):
 - Central table: 19.4%.
 - Soft-wall "low" variant: 13.6% (17.3% total). Its smaller sigma lets more
   ions overshoot and leave hot.
@@ -598,135 +594,120 @@ inlet / median pump-out time.**
   +-factor-2 short-range uncertainty moves the 20 SCCM yield by roughly
   -10 to -30%.
 
-**Reading it:**
-- **Best: 5 keV at ~40 SCCM, 26% thermalized.** That's 3x the 500 eV table
+- Best: 5 keV at ~40 SCCM, 26% thermalized. That's 3x the 500 eV table
   peak (8.6% at 20-25 SCCM) and ~7x the old edep 500 eV peak.
   - 5 keV is flat within the error bars at 22-26% from 25 to 50 SCCM, so
     the optimum is broad.
-- **The peak moves to higher flow with energy**: ~20-25 SCCM at 500 eV,
+- The peak moves to higher flow with energy: ~20-25 SCCM at 500 eV,
   ~20-30 SCCM at 2 keV, ~40 SCCM at 5 keV.
   - Deeper-stopping ions are blown back out of the inlet only at higher
     flow. At 30 SCCM backflow takes 24% at 500 eV, 4% at 2 keV and 1% at
     5 keV.
   - Meanwhile denser gas keeps slowing diffusion to the walls.
   - At 58 SCCM backflow returns (14% at 5 keV, 49% at 2 keV).
-- **At low flow keV ions don't thermalize.** At 5 SCCM, 5 keV gives 28.6%
+- At low flow keV ions don't thermalize. At 5 SCCM, 5 keV gives 28.6%
   extracted but none thermalized: the ions fly straight along the axis and
   out of the outlet within microseconds. Thermalized-only is the meaningful
   yield.
   - Below ~15 SCCM, 500 eV actually beats 5 keV on thermalized yield.
-- **Pump-out times grow with flow** (5 keV: 17 ms at 20 SCCM to 71 ms at 58).
+- Pump-out times grow with flow (5 keV: 17 ms at 20 SCCM to 71 ms at 58).
 
-**Caveats:**
-- **Electronic stopping is not modeled** (LSS estimate ~30-50% of nuclear
+Caveats:
+- Electronic stopping is not modeled (LSS estimate ~30-50% of nuclear
   at 1-10 keV). It would shorten the ranges, so the optimum energy is
   probably above 5 keV.
-- **BaF+ dissociation and internal heating in keV collisions are not
-  modeled.**
-- **The chamber grid is under-resolved** from 10 SCCM up, and badly at
+- BaF+ dissociation and internal heating in keV collisions are not
+  modeled.
+- The chamber grid is under-resolved from 10 SCCM up, and badly at
   40-58 SCCM (Ne mean free path ~0.03-0.04 mm vs 0.41 mm cells). The inlet backflow
   at those flows is only approximate.
-- **40, 45 and 50 SCCM use the new 0.3 s neon fields; 58 SCCM uses the
-  original scan field.**
+- 40, 45 and 50 SCCM use the new 0.3 s neon fields; 58 SCCM uses the
+  original scan field.
 
-**Figures:** results/figures/fluor3d_scan_kev_{extraction,pumpout,energy}.png
+Figures: results/figures/fluor3d_scan_kev_{extraction,pumpout,energy}.png
 and _summary.csv, from `python tools/plot_fluor3d_scan.py --set kev`. The
 histograms show 5 keV.
 
 # Original (leaky-field) results
 
-Follow-up to `docs/hpc-fluor-cell-3d-molecules-handoff.md`, working through its
-section 2 smoke test and section 4 validation checklist against the completed,
+Follow-up to `docs/hpc-fluor-cell-3d-molecules-handoff.md`: its section 2
+smoke test and section 4 validation checklist, run against the completed,
 settled neon run (`cases/fluor-cell-3d`, MDOT=6.002164e-08 kg/s, FILLN=5.4e21,
 FNUM=1e11, settled from ~step 290000 onward, frozen at step 360000).
 
 ## Bugs found and fixed in `tracer/ParticleTracing3D.jl`
 
-The handoff doc's own testing-status note said to treat the first real run
-against this repo's actual geometry/field as the real first end-to-end test.
-It was -- the section 2 smoke test (`-n 20`) surfaced two real bugs, neither
-caught by the file's synthetic-cube local testing:
+The handoff said to treat the first run on the real geometry/field as the
+first end-to-end test. The section 2 smoke test (`-n 20`) turned up two bugs
+the synthetic-cube tests had missed:
 
-1. **Exit positions weren't clipped to the actual crossing point.**
+1. Exit positions weren't clipped to the actual crossing point.
    `freePath` samples free-flight steps up to 1000m as a safety cap (this
-   case's box is ~0.2m). When a sampled step overshot the wall mesh or the
-   simulation box, `getCollision`/`propagate` reported the raw, un-clipped
-   endpoint as the particle's final position instead of where it actually
-   crossed. In the first smoke test this put roughly half of 20 particles
-   1-289 meters from a 0.2m box -- a silent bad value, not a crash, so
-   easy to miss without checking individual rows (which the doc's own
-   validation checklist calls for, and which is what caught this).
+   case's box is ~0.2m). When a step overshot the wall mesh or the box,
+   `getCollision`/`propagate` reported the raw endpoint as the final
+   position instead of the crossing point. In the first smoke test about
+   half of 20 particles ended 1-289 m from a 0.2m box. A silent bad value,
+   not a crash; it only showed up by checking individual rows, as the
+   checklist asks.
 
-   Fixed by having `segment_hits_triangle` return the intersection
-   fraction `t` (it already computed this internally, via the standard
-   Moller-Trumbore parametrization, and simply discarded it), threading
-   that through `getCollision` (now returns `(code, t)` instead of a bare
-   code), and clipping `xnext` to the true crossing point in `propagate`
-   before returning. The clip is nudged a hair (1e-9, sub-angstrom on this
-   scale) past the exact boundary so a later re-classification call on the
-   same output position reliably re-detects it as outside/on the mesh,
-   rather than landing exactly on a boundary where a plain `>`/`<`
-   comparison can go either way.
+   Fix: `segment_hits_triangle` now returns the intersection fraction `t`
+   (it already computed it via the standard Moller-Trumbore
+   parametrization and threw it away), `getCollision` returns `(code, t)`
+   instead of a bare code, and `propagate` clips `xnext` to the crossing
+   point before returning. The clip is nudged 1e-9 (sub-angstrom here) past
+   the boundary so a later re-classification of the same position reliably
+   sees it as outside/on the mesh, instead of sitting exactly on a boundary
+   where a plain `>`/`<` can go either way.
 
-2. **A dummy call broke once (1)'s interface changed.** `SimulateParticles`
-   makes one throwaway call to `propagate` purely to measure the output
-   tuple's length for array allocation, using an inline placeholder
-   `getCollision` of `(x,y)->true` (a stand-in for "the very first
-   step always immediately collides", not real physics). That still
-   returned a bare `Bool` after the interface changed to `(code, t)`,
-   causing a `BoundsError: attempt to access Bool at index [2]` the
-   moment the real fix went in. Fixed to `(x,y)->(1,1.0)`, matching the
-   new interface.
+2. A dummy call broke after (1) changed the interface. `SimulateParticles`
+   makes one throwaway call to `propagate` just to get the output tuple
+   length for allocation, with a placeholder `getCollision` of
+   `(x,y)->true` ("the first step always collides", not physics). That
+   still returned a bare `Bool`, giving `BoundsError: attempt to access
+   Bool at index [2]` once the fix went in. Changed to `(x,y)->(1,1.0)`.
 
-Both call sites at `getCollision(SPAWN_REF, xpart)` (the `--spawnclip`
-check) and the exit-classification re-check were updated for the new
-`(code, t)` return shape as well.
+The `getCollision(SPAWN_REF, xpart)` call (the `--spawnclip` check) and the
+exit-classification re-check were also updated for the `(code, t)` return.
 
-Verified after the fix: all exit positions land within the domain; the
-[300-particle statistics runs](#results) below ran cleanly with no
-further position anomalies.
+After the fix all exit positions are inside the domain, and the
+[300-particle statistics runs](#results) below ran with no further position
+anomalies.
 
 ## Validation checklist (handoff doc section 4)
 
 | Check | Result |
 |---|---|
-| Geometry read counts | 1127 points / 2258 triangles -- exact match to `check_surf3d.py`'s own count for the same file |
+| Geometry read counts | 1127 points / 2258 triangles, exact match to `check_surf3d.py`'s count for the same file |
 | Reproducibility | Identical output across repeated runs at the same `--seed`/`--threads` |
-| Energy sanity | Exit speed retains 81-94% of the 24843.71 m/s injection speed even after collisions -- not down to the neon field's own ~1-200 m/s scale. Not a bug: BaF+ (156u) on Ne (20u) is a heavy-on-light collision (max ~40% KE transfer for a dead-on hit, less for glancing), and mean collision count here is only 0.6-2.1 -- nowhere near enough hits for real thermalization in this short a transit. |
-| Collision-count sanity | Path-integrated mean-free-path estimate along the inlet-to-outlet centerline, using the real settled neon field's own density, gives ~5.4 expected collisions at sigma=5.0e-19; observed mean was 2.06. Same order of magnitude; the gap is plausibly explained by particles scattering off the direct centerline after their first hit, shortening their remaining path through the dense gas region relative to the naive straight-line estimate. |
-| sigma sensitivity | Run at both 5.0e-19 and 1.5e-19 m^2 -- the transmission fraction moves meaningfully between them (see below), so this cross-section uncertainty is not negligible for a precise number. |
+| Energy sanity | Exit speed keeps 81-94% of the 24843.71 m/s injection speed even after collisions, not down to the neon field's ~1-200 m/s scale. Not a bug: BaF+ (156u) on Ne (20u) is heavy-on-light (max ~40% KE transfer for a head-on hit, less for glancing), and the mean collision count is only 0.6-2.1, far too few to thermalize in this short a transit. |
+| Collision-count sanity | Path-integrated mean-free-path estimate along the inlet-to-outlet centerline, with the settled neon density, gives ~5.4 expected collisions at sigma=5.0e-19; observed mean 2.06. Same order of magnitude; the gap is plausibly particles scattering off the centerline after the first hit, which shortens their path through the dense gas compared with the straight-line estimate. |
+| sigma sensitivity | Run at 5.0e-19 and 1.5e-19 m^2. Transmission moves a lot between them (see below), so the cross-section uncertainty matters for a precise number. |
 
-**Classification methodology note**: the handoff doc's literal "transmitted
-if `xnext` near 0.08255m [the outlet]" criterion does not hold in practice.
-The outlet is an open channel, not a wall -- a particle that passes it with
-positive vx just keeps coasting through the near-vacuum downstream region to
-the simulation box's far edge (x=0.2m) rather than stopping near the outlet
-itself. Classification used instead: a particle that exits at a box face
-with x beyond the outlet counts as transmitted; exits at a box face with
-x at or before the outlet count as lost back toward the inlet; anything
-that does NOT end at a box face (i.e. an interior position) is a wall hit
-(stuck). This is well-justified given the mesh is confirmed watertight: a
-particle can only leave the housing through a port opening or a wall hit,
-so a box-exit downstream of the outlet essentially had to have passed
-through it.
+Classification: the handoff's "transmitted if `xnext` near 0.08255m [the
+outlet]" criterion doesn't work. The outlet is an open channel, not a wall,
+so a particle passing it with positive vx keeps coasting through the
+near-vacuum region to the box's far edge (x=0.2m) instead of stopping near
+the outlet. Used instead: exit at a box face with x beyond the outlet =
+transmitted; exit at a box face with x at or before the outlet = lost back
+toward the inlet; ending anywhere in the interior (not a box face) = wall hit
+(stuck). Since the mesh is watertight, a particle can only leave the housing
+through a port or a wall hit, so a box exit downstream of the outlet must
+have gone through it.
 
 ## Results
 
 n=300 per condition, `--seed 42`, traced against the one completed neon
-run (flow rate corresponding to MDOT=6.002164e-08 kg/s / ~4 SCCM):
+run (MDOT=6.002164e-08 kg/s, ~4 SCCM):
 
 | sigma (m^2) | Transmitted | Lost (back out inlet) | Stuck on wall | Mean collides | Ballistic (0 collides) |
 |---|---|---|---|---|---|
 | 5.0e-19 | 72.3% | 0.0% | 27.7% | 2.06 | 16.0% |
 | 1.5e-19 | 89.3% | 0.0% | 10.7% | 0.61 | 57.0% |
 
-The transmission fraction moves by 17 percentage points across the
-cross-section uncertainty band -- both values say "mostly transmitted"
-qualitatively, but a precise number should be reported as a range, not
-collapsed to one point estimate, given this spread.
+Transmission moves by 17 percentage points across the cross-section band.
+Both say "mostly transmitted", but a precise number should be quoted as a
+range.
 
-Notably, "lost back out the inlet" was 0% at both cross sections --- no
-particle backscattered hard enough to exit back out the inlet side of the
-box at this flow rate. Only one flow rate (the completed neon run) was
-traced; a flow-rate scan would need additional neon runs at different
-MDOT/FILLN.
+"Lost back out the inlet" was 0% at both cross sections: no particle
+backscattered out the inlet side of the box at this flow. Only one flow rate
+was traced; a flow scan needs more neon runs at different MDOT/FILLN.

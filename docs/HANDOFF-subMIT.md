@@ -1,39 +1,35 @@
 # Handoff: fluor-cell-3d work, moving from ORCD Engaging to MIT subMIT
 
-Written 2026-10-01 on ORCD by the Claude session that did this work. You are the
-next Claude, on subMIT. This file is self-contained.
+Written 2026-10-01 on ORCD, for picking the work up on subMIT. Self-contained.
 
-Read in this order:
-1. This file.
-2. Your memory notes. They were copied from ORCD; section 7 lists which parts are
-   now stale.
-3. `docs/fluor-cell-3d-molecules-findings.md`, only when you need the full
-   history. It has every result table and the reasoning behind it.
+Also see:
+- the memory notes copied from ORCD (section 7 lists the stale parts);
+- `docs/fluor-cell-3d-molecules-findings.md` for the full history, every result
+  table and the reasoning behind it.
 
-`docs/MIGRATION-subMIT.md` holds the setup commands the user ran. Section 1 here
-checks that they worked.
+`docs/MIGRATION-subMIT.md` has the setup commands. Section 1 here checks that
+they worked.
 
 ---------------------------------------------------------------------------
 
-## 0. What the user expects from you
+## 0. Plan and working rules
 
 - Continue the physics work (section 5). First confirm the environment works
-  (section 1), and update your memory notes for subMIT (section 7).
-- Working style the user asked for (also in memory):
-  - **Never `git push` without asking.** Local commits are fine.
-  - During long or unattended runs, check every ~30 min with a
-    `CronCreate` cron at off-minutes, e.g. `13,43 * * * *`. End each check with a
-    **one-line status update**, and keep check-in replies short.
+  (section 1), and update the memory notes for subMIT (section 7).
+- Working rules (also in memory):
+  - Never `git push` without asking. Local commits are fine.
+  - During long or unattended runs, check every ~30 min with a cron at
+    off-minutes, e.g. `13,43 * * * *`. End each check with a one-line status
+    update, and keep check-in replies short.
   - Watch disk quota (`quota -s` on subMIT). Delete only clearly useless files of
     this project, never other projects' files, and ask before deleting raw data.
-  - When the user asks "why" about the physics, answer with measured numbers
-    from the runs, not just theory. For example, they once asked why
-    higher-energy ions didn't go deeper. The answer was measured stopping depths
-    plus the ln E collision argument.
+  - "Why" questions about the physics get measured numbers from the runs, not
+    just theory (e.g. why higher-energy ions didn't go deeper: measured
+    stopping depths plus the ln E collision argument).
   - Run heavy work (parsing GB-size files, builds, simulations) as batch jobs,
     never on the login node. On subMIT, interactive work must stay under 15 min.
-  - When asked to run overnight, keep the cluster busy. If the main job finishes
-    early, pick a sensible follow-up and say what you chose.
+  - Overnight runs: keep the cluster busy. If the main job finishes early, pick
+    a sensible follow-up and say what was chosen.
 
 ## 1. Verify the environment (do this first, report results in one short list)
 
@@ -57,7 +53,7 @@ If anything is missing, fix it with the matching step in `docs/MIGRATION-subMIT.
 Then run two smoke tests as batch jobs. Use `sbatch -p submit`, keep them small,
 and check `seff <jobid>` afterwards to learn subMIT's speed and memory.
 
-1. **Tracer.** Re-trace 300 ions on the coarse 17 SCCM field:
+1. Tracer. Re-trace 300 ions on the coarse 17 SCCM field:
    ```bash
    sbatch -p submit -t 00:30:00 --cpus-per-task=16 --mem=48G \
      --export=ALL,SCCM=17,SEED=9001,NPART=300,COND=edep tools/wsl/sbatch_fluor3d_tracer_chunk.sh
@@ -69,7 +65,7 @@ and check `seff <jobid>` afterwards to learn subMIT's speed and memory.
    - If Julia dies with "Illegal instruction" (rc 132), the precompile cache
      doesn't fit that CPU type: wipe `~/.julia/compiled` and precompile again.
      On ORCD this happened on some node types.
-2. **Neon / SPARTA.** A 2000-step run of the coarse case in a throwaway directory:
+2. Neon / SPARTA. A 2000-step run of the coarse case in a throwaway directory:
    ```bash
    mkdir -p $C/smoke && cp cases/fluor-cell-3d/{in.ne_fluor3d_sealed_run,cell_fluor3d_sealed.surf,ne.species,ne.vss} $C/smoke/
    sbatch -p submit -n 48 -t 00:30:00 --mem=64G --wrap "cd $C/smoke && module load mpi && \
@@ -83,7 +79,7 @@ and check `seff <jobid>` afterwards to learn subMIT's speed and memory.
 
 ## 2. Project in brief
 
-- **What is modeled:** a 3D DSMC (SPARTA 27Aug2026) model of 23 K neon buffer gas
+- Model: a 3D DSMC (SPARTA 27Aug2026) model of 23 K neon buffer gas
   in a sealed fluorescence/cooling cell, `cases/fluor-cell-3d/cell_fluor3d_sealed.surf`.
   - Coordinates in m.
   - The molecule inlet port face is at x = 30.48 mm and the chamber starts at
@@ -92,19 +88,19 @@ and check `seff <jobid>` afterwards to learn subMIT's speed and memory.
     82.55 mm.
   - All ports sit on the axis y = z = 19.05 mm.
   - The buffer gas enters at (34.29, 25.4, 0) mm.
-- **The tracer:** BaF+ ions are flown through a time-averaged ("frozen") neon
+- Tracer: BaF+ ions are flown through a time-averaged ("frozen") neon
   field by the Julia tracer `tracer/ParticleTracing3D.jl`.
-- **Figure of merit:** the fraction extracted through the outlet, especially the
+- Figure of merit: the fraction extracted through the outlet, especially the
   thermalized fraction (< 0.1 eV at exit). Losses are wall hits and "back out
   the inlet".
-- **Cross sections** (`--sigma-model`):
+- Cross sections (`--sigma-model`):
   - `table` (default): the computed BaF+-Ne table, `tracer/data/bafplus_ne_sigma_tracer.tsv`.
     It was extended to ~19 keV lab in 41e1cc2 and matches ZBL nuclear stopping
     to 1-2%. Variants: `--sigma-table-variant central|low|high`.
-  - `edep`: the older 1/v model, floored at 1.5e-19 m^2. The user calls it "the
-    1/v cross section".
+  - `edep`: the older 1/v model, floored at 1.5e-19 m^2 ("the 1/v cross
+    section").
   - `const`.
-- **Flow scale:** flows are in SCCM. Chamber density scales ~linearly (aperture
+- Flow scale: flows are in SCCM. Chamber density scales ~linearly (aperture
   law), e.g. 2.15e22 m^-3 at 17 SCCM. The neon mean free path is ~0.4 mm x
   4/SCCM.
 
@@ -141,13 +137,13 @@ Each flow directory has its run files, `field.grid` (the raw dumps; large), and
 
 - NP (the task count) must stay fixed for the life of a run, because restart
   files are written per processor.
-- **On subMIT** jobs can run up to 6 days, so prefer one long job, e.g.:
+- On subMIT jobs can run up to 6 days, so prefer one long job, e.g.:
   ```bash
   sbatch -p submit -n 48 -t 2-00:00:00 --mem=128G \
     --export=ALL,SCCM=17,RUNBASE=<newbase>,MAXCHUNKS=0,CHAIN_TIME=2-00:00:00,<grid options> tools/wsl/sbatch_fluor3d_scan.sh
   ```
-  The ORCD 15/30-min chaining was only to fit ORCD queues. Ask the user what
-  job size and length they prefer on subMIT; fair-share there favors smaller
+  The ORCD 15/30-min chaining was only to fit ORCD queues. Job size and
+  length on subMIT is still to be decided; fair-share there favors smaller
   requests.
 
 ### 3.2 Post: `sbatch_fluor3d_scan_post.sh`
@@ -185,7 +181,7 @@ Each flow directory has its run files, `field.grid` (the raw dumps; large), and
   TOPT="-p submit -t 01:00:00 --cpus-per-task=16 --mem=96G" \
   setsid nohup bash tools/wsl/fluor3d_stats_driver.sh >> driver_<name>.log 2>&1 < /dev/null &
   ```
-  - ALWAYS pass TOPT on subMIT; the built-in default names an ORCD partition.
+  - Always pass TOPT on subMIT; the built-in default names an ORCD partition.
   - TOPT may hold several `;`-separated option sets, which are rotated per chunk.
   - A timed-out chunk halves the chunk size (down to MINCHUNK).
 - Check progress via `post/.stats_jobs*` and the tracer outputs, not only the
@@ -215,28 +211,27 @@ Each flow directory has its run files, `field.grid` (the raw dumps; large), and
     `--saveall 1 --trajprint 40` (see git log 3b600bd/15d049c for the job
     pattern). pyvista renders off-screen (`PYVISTA_OFF_SCREEN=true`). Check it
     works on subMIT compute nodes.
-- Before writing plotting or figure code, load the `dataviz` skill. The reference
-  palette slots are used throughout.
+- Figures use the `dataviz` reference palette slots throughout.
 
 ## 4. Results so far (details and CIs are in the findings doc)
 
-- **500 eV injection, edep:** extraction peaks ~17-20 SCCM at 3.2-3.5%. At higher
+- 500 eV injection, edep: extraction peaks ~17-20 SCCM at 3.2-3.5%. At higher
   flow, inlet backflow wins.
-- **Thermal-start test** (23 K ions, constant 1.93e-18):
+- Thermal-start test (23 K ions, constant 1.93e-18):
   - Extraction depends mainly on where the ion starts. At 20 SCCM: 8% (10 mm in),
     23% (chamber centre), 47% (3/4 through), 87% (2 mm before the outlet).
   - No peak up to 127 SCCM. Denser gas slows diffusion to the walls.
-- **Stopping depth vs energy:**
+- Stopping depth vs energy:
   - With edep, ions stop ~7 mm in for 0.5-1 keV (stopping ~ ln E, ~20% energy
     lost per collision).
   - With the table, at 20 SCCM: 12 / 20 / 26 / 35 mm at 0.5 / 2 / 5 / 10 keV.
-- **keV injection with the table:**
-  - **Best: 5 keV at ~40 SCCM, 26% thermalized** (22-26% over 25-50 SCCM).
+- keV injection with the table:
+  - Best: 5 keV at ~40 SCCM, 26% thermalized (22-26% over 25-50 SCCM).
   - 2 keV peaks ~15% (20-30 SCCM); 500 eV table peaks 8.6%.
   - At <= 10 SCCM keV ions fly out hot.
   - At 20 SCCM / 5 keV, the sigma low/high variants give 13.6 / 16.9% vs 19.4%
     central.
-- **Caveats:** not modeled: electronic stopping (LSS ~30-50% of nuclear at 1-10
+- Caveats. Not modeled: electronic stopping (LSS ~30-50% of nuclear at 1-10
   keV), BaF+ dissociation in keV collisions, space charge. The grid is
   under-resolved at >= 10 SCCM, and section 5 tests that.
 
@@ -258,18 +253,18 @@ What it shows so far:
 FINE status:
 - If `fluor-scan-fine/sccm17/post/tracer_edep_s*.out` has >= 600 extracted ions
   in the copied data, the result is complete.
-  - The ORCD session was meant to write it up in the findings doc ("Grid
-    convergence at 17 SCCM") and rebuild the package. Check `git log`.
+  - The plan was to write it up in the findings doc ("Grid convergence at
+    17 SCCM") and rebuild the package before leaving ORCD. Check `git log`.
   - If that doc section is missing, write it.
 - If FINE outputs are absent or partial, the frozen field
   (`post/frozen.grid`, 1.5 GB) is there if the final package was copied.
   - Re-trace with the driver (section 3.3, `RUNBASE=fluor-scan-fine`,
     `TOPT` --mem >= 96G) to 600 extracted.
-  - If even frozen.grid is missing, the raw dumps stayed on ORCD. Ask the user.
+  - If even frozen.grid is missing, the raw dumps stayed on ORCD.
 
 Next steps (propose them, ask before big runs):
 1. Finish FINE and the doc section, then commit locally.
-2. **0.10 mm port grid** (`INPUT=ports PORTREF=4`). It needs SPARTA built with
+2. 0.10 mm port grid (`INPUT=ports PORTREF=4`). It needs SPARTA built with
    `SPARTA_BIGBIG=1`; on ORCD it failed with "Hierarchical grid induces cell IDs
    that exceed 32 bits".
    - FNUM_SET stays per unit volume (1.2052e22 at 17 SCCM).
@@ -278,7 +273,7 @@ Next steps (propose them, ask before big runs):
      mflow*dt/(m*fnum*V_cell) per step (it did at PREF=3).
 3. Re-check the best case (5 keV, ~40 SCCM, table) on a refined grid, since
    backflow is grid-sensitive.
-4. Sanity checks the user agreed were worthwhile (not done yet):
+4. Sanity checks agreed as worthwhile (not done yet):
    - Tracer diffusion coefficient in uniform static gas vs Chapman-Enskog and
      measured Ba+ mobility in Ne.
    - Flow-following in uniform flowing gas.
@@ -326,6 +321,4 @@ Add the subMIT facts:
 - interactive work < 15 min;
 - fair-share favors small requests.
 
-Keep the physics results and the user preferences.
-</content>
-</invoke>
+Keep the physics results and the working rules.

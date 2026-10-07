@@ -1,7 +1,7 @@
 #!/bin/bash
 # Build the ORCD -> subMIT migration package (see docs/MIGRATION-subMIT.md).
-# Re-runnable: it overwrites the package, so run it again after new results land
-# (e.g. the uniform-0.20mm grid-convergence tracer).
+# Overwrites the package; rerun after new results land (e.g. the uniform
+# 0.20mm grid-convergence tracer).
 #   bash tools/migrate/make_migration_package.sh        [OUT=dir to override]
 # Copies only small/derived data: frozen fields, tracer outputs, inputs, logs,
 # figures. Raw field.grid dumps and restart files are left on ORCD scratch.

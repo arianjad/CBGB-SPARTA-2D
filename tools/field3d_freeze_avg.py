@@ -2,13 +2,11 @@
 """Freeze a TIME-AVERAGED frame from a 3D SPARTA grid dump for
 ParticleTracing3D.jl.
 
-tools/field3d_freeze.py freezes a single frame, which is already a time
-average over one dump window (fix ave/grid). That is fine when the window is
-long (20-25 ms at 1-8 SCCM). It is too short at high flow, where the
-fluor-cell-3d scan uses 2.4-12 ms windows to fit mit_quicktest. This
-averages the last K frames, matched by cell id, and writes one frame in the
-same raw layout (SPARTA's 9-line ITEM: header, then rows), so the tracer
-reads it unchanged.
+A single frame is already averaged over one dump window (fix ave/grid),
+which is enough at 1-8 SCCM (20-25 ms windows) but not at high flow, where the
+fluor-cell-3d scan uses 2.4-12 ms windows to fit mit_quicktest. This averages
+the last K frames, matched by cell id, and writes one frame in the same raw
+layout (9-line ITEM: header, then rows), so the tracer reads it unchanged.
 
 The duplicate empty frame a resumed run re-dumps at its starting step is
 dropped (the first copy of each timestep is kept).

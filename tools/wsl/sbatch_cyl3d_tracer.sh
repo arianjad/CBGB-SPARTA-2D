@@ -46,17 +46,15 @@ RUNDIR="$HOME/orcd/scratch/cbgb-sparta-3d/${RUNBASE:-$RUNBASE_DEF}/sccm$SCCM"
 cd "$RUNDIR/post" || exit 2
 [ -f frozen.grid ] || { echo "no frozen.grid -- run sbatch_cyl3d_post.sh first"; exit 2; }
 JULIA="$SLURM_SUBMIT_DIR/.local/julia-1.9.4/bin/julia"
-# Per-CPU-type Julia compile cache. The shared ~/.julia/compiled lives on NFS; a job
-# on a new CPU type rewrites its .so files in place, and running jobs on other nodes
-# that have them memory-mapped then die with SIGBUS ("Bus error", rc 135) hours later
-# (2026-10-04: two 30/40 SCCM tracer jobs). New caches now go to a depot per CPU model.
+# Julia compile cache per CPU model. ~/.julia/compiled is on NFS; a job on a new CPU
+# type rewrites the .so files in place and jobs on other nodes with them mmapped die
+# with SIGBUS (rc 135) hours later (2026-10-04, two 30/40 SCCM tracer jobs).
 CPUKEY=$(grep -m1 "model name" /proc/cpuinfo | md5sum | cut -c1-8)
 export JULIA_DEPOT_PATH="$HOME/.julia_bycpu/$CPUKEY:$HOME/.julia"
-# Free-flight cap (tracer --max-flight, null steps): without it each flight uses the gas
-# density at its start point, which pushes ions from the low-density inlet bore 2-4 mm too
-# deep (2026-10-05, tools/sanity/). The cyl-ports campaign was started without it and keeps
-# it off (MAXFLIGHT=0) so its 200 points stay consistent, and so does the helium comparison
-# run cyl-ports-he (user's choice, 2026-10-05); everything else gets 0.2 mm.
+# Free-flight cap (--max-flight, null steps). Without it each flight uses the gas density
+# at its start point, which pushes ions from the low-density inlet bore 2-4 mm too deep
+# (2026-10-05, tools/sanity/). cyl-ports and cyl-ports-he were started without it and keep
+# MAXFLIGHT=0 so their points stay consistent; everything else gets 0.2 mm.
 RB="${RUNBASE:-$RUNBASE_DEF}"
 MAXFLIGHT="${MAXFLIGHT:-$(case "$RB" in cyl-ports|cyl-ports-he) echo 0 ;; *) echo 2e-4 ;; esac)}"
 echo "RUNBASE $RB, MAXFLIGHT $MAXFLIGHT m"

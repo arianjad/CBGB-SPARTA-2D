@@ -1,32 +1,21 @@
 #!/usr/bin/env python3
-"""Revolve the existing 2D-axisymmetric Takahashi single-stage-cell profile
-(from gen_takahashi.py's loop()) into a true 3D triangulated SPARTA surface,
-for a first scoping test of a 3D version of the same, already-validated,
-on-axis geometry.
+"""Revolve the 2D-axisymmetric Takahashi single-stage-cell profile
+(gen_takahashi.py loop()) into a 3D triangulated SPARTA surface, to test
+the 3D pipeline on the on-axis geometry we have a 2D reference for.
 
-Same physical dimensions as gen_takahashi.py (12.7mm ID cell, 53mm body,
-4mm ID x 20mm inlet tube, 5mm aperture through a 0.5mm plate). This is NOT
-yet the user's own asymmetric geometry (offset inlet) -- this is step 1:
-get the 3D pipeline working and timed on the case we already have a solid
-2D-axisymmetric reference result for.
+Same dimensions as gen_takahashi.py (12.7mm ID cell, 53mm body, 4mm ID x
+20mm inlet tube, 5mm aperture through a 0.5mm plate).
 
-Outward-normal convention: SPARTA triangles need normals pointing OUT of
-the solid (right-hand rule N=(p2-p1)x(p3-p1)). For each 2D profile edge we
-know the CORRECT outward 2D normal analytically (rotate the edge tangent
-90 degrees, using the sign determined by the polygon's traversal direction
--- verified clockwise here via the shoelace formula, giving desired 2D
-normal (Nx,Nr) = (-dr, dx) for edge tangent (dx,dr)). We generate each
-candidate triangle, compute its actual geometric normal, and flip vertex
-order if it disagrees with the analytically-known desired direction. This
-sidesteps having to hand-derive a single global triangle-winding rule for
-every edge case (frustum band vs. cone/apex).
+Normals must point out of the solid (N=(p2-p1)x(p3-p1)). The profile is
+traversed clockwise (shoelace), so the outward 2D normal of edge (dx,dr) is
+(Nx,Nr) = (-dr, dx); each triangle is flipped if its normal disagrees.
 """
 import math
 import os
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
-# ---- paper geometry (Sec. III.A) -- identical to gen_takahashi.py ----
+# ---- paper geometry (Sec. III.A), same as gen_takahashi.py ----
 RCELL = 0.00635
 CELL_LENGTH = 0.053
 RB = 0.002
@@ -51,7 +40,7 @@ RTOP_DOMAIN = NY * DR1
 NX = 109
 XHI = XLO + NX * DX1
 
-NTHETA = 24  # azimuthal segments -- coarse-but-round, fine for a scoping run
+NTHETA = 24  # azimuthal segments, coarse but fine for scoping
 
 pts_raw = [(XEXIT, RTOP_GEOM), (XEXIT, RAP), (XPLATE, RAP), (XPLATE, RCELL), (0.0, RCELL),
            (0.0, RB), (XC, RB), (XC, ROUT), (XOUT, ROUT), (XOUT, RTOP_GEOM)]
@@ -106,7 +95,7 @@ for i in range(N):
     if r1 <= 0.0 and r2 <= 0.0:
         continue  # degenerate on-axis edge, no real surface
     dx, dr = x2 - x1, r2 - r1
-    Nx, Nr = -dr, dx  # desired outward 2D normal (clockwise-traversal formula, verified)
+    Nx, Nr = -dr, dx  # outward 2D normal for clockwise traversal
     ring1 = ring_cache[i]
     ring2 = ring_cache[j]
     ttype = types[i]

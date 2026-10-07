@@ -1,8 +1,6 @@
-"""Extract an on-axis downstream profile (xc,yc,nrho,u,t for cells from just
-past the aperture out to near the domain edge) from one converged run's
-field.grid, using the fast tail-only reader. Saves a small CSV for later
-scanning many candidate downstream distances without re-reading the source
-file each time.
+"""Dump on-axis downstream cells (xc,yc,nrho,u,t, aperture to near the domain
+edge) from a converged field.grid to a small CSV, so downstream distances can
+be scanned without re-reading the big file. Uses the fast tail-only reader.
 
 Usage: python3 extract_downstream_profile.py <sccm> <run_dir> <out_csv>
 """

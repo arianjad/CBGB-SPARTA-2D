@@ -1,31 +1,23 @@
 #!/usr/bin/env python3
-"""Orthogonal-slice plots of a true-3D SPARTA grid dump (fluor-cell-3d and
-any other flat, single-level Cartesian grid.grid dump -- NOT valid for a
-nested-refinement grid like takahashi-3d/b5-lean, which needs level-aware
-reshaping this script does not do).
+"""XY/XZ/YZ slices of a 3D SPARTA grid dump (fluor-cell-3d or any flat,
+single-level Cartesian grid.grid). Not for nested grids like
+takahashi-3d/b5-lean.
 
-Why slices instead of the azimuthal (x, r) binning tools/plot_field_3d.py
-uses: that tool assumes near-axisymmetry, which does not hold here (the gas
-inlet is off-axis by construction). A real 2D heatmap through a plane that
-actually contains the ports shows the non-axisymmetric structure directly;
-azimuthal binning would wash it out.
+Slices rather than the (x, r) binning of tools/plot_field_3d.py because the
+gas inlet is off-axis here, so azimuthal averaging would wash out the
+structure.
 
-Reshapes the dump's flat cell list into a (nx, ny, nz) array from the cell
-centers, then plots three orthogonal 2D slices (XY, XZ, YZ) of one field
-component. Pass --surf to additionally overlay raw wall-mesh/cutting-plane
-intersection lines -- for this case's fused multi-part CAD geometry that is
-often visually dense (real panels/bosses near the slice, not a bug) rather
-than a clean silhouette, since this script does not build closed polygons
-from the raw triangle-plane crossings. Off by default for that reason.
+--surf overlays the raw wall-mesh/plane crossings. For the fused CAD
+geometry these are busy (no closed polygons are built), so it's off by
+default.
 
 Usage:
   python tools/plot_field_3d_slices.py RUN_DIR --out OUT.png
       [--field u|v|w|nrho|temp] [--surf cell_fluor3d.surf]
       [--x X] [--y Y] [--z Z] [--timestep N] [--frac F]
 
-Only reads a byte-sized tail of the (possibly still-growing) dump by
-default (see field_io.read_complete_frames), so it is safe to re-run while
-the solver is still writing to field.grid.
+Reads only the tail of the dump by default (field_io.read_complete_frames),
+so it can be re-run while the solver is still writing field.grid.
 """
 import argparse
 import os
@@ -45,17 +37,14 @@ from field_io import read_complete_frames, select_frame, FieldFormatError
 DIVERGING_FIELDS = {"u", "v", "w"}
 FIELD_UNITS = {"u": "m/s", "v": "m/s", "w": "m/s", "nrho": "m$^{-3}$", "temp": "K"}
 
-# Dump columns are "id xc yc zc xlo ylo zlo xhi yhi zhi f_ag[1..5]" -- the
-# last 5 are named after the averaging fix, not semantically (matches
-# tools/plot_field_3d.py's NCOL=15 positional convention; f_ag[1..5] =
-# nrho,u,v,w,temp in that order, per this deck's `compute cg`/`compute tg`).
+# Dump columns: "id xc yc zc xlo ylo zlo xhi yhi zhi f_ag[1..5]", with
+# f_ag[1..5] = nrho,u,v,w,temp (deck's `compute cg`/`compute tg`). Same
+# NCOL=15 layout as tools/plot_field_3d.py.
 NCOL = 15
 FIELD_POS = {"nrho": 10, "u": 11, "v": 12, "w": 13, "temp": 14}
 
-# Cells cut by the curved cell wall can report a wildly inflated nrho
-# (observed up to ~2.7e24 m^-3 in this repo's other 3D case, vs ~1.4e22
-# anywhere in the real flow) -- a reporting artifact from a tiny true cut
-# volume, not a real density. Same convention as tools/plot_field_3d.py.
+# Wall-cut cells can report nrho up to ~2.7e24 m^-3 (other 3D case; real
+# flow ~1.4e22) from their tiny cut volume. Same cut as tools/plot_field_3d.py.
 NRHO_CEILING = 1e23
 
 
@@ -70,15 +59,11 @@ def load_frame(run_dir, frac, timestep):
 def reshape_grid(frame):
     """Turn the flat per-cell dump into structured (nx,ny,nz) arrays.
 
-    Only valid for a flat, single create_grid level. Indexes by the cell's
-    lo-bound corner (xlo,ylo,zlo), not its center (xc,yc,zc): a cell that
-    SPARTA's cut-cell algorithm splits into sub-cells (because the surface
-    carves a disconnected pocket out of it) keeps its parent's exact lo/hi
-    bounds on every sub-cell, but each sub-cell gets its OWN centroid --
-    indexing by center would treat split sub-cells as extra, spuriously
-    distinct grid positions (observed: 53464 rows vs. 53460 = 60*27*33 flat
-    cells, from 4 split cells, when indexed by center). Indexing by lo-bound
-    correctly folds split sub-cells back onto their one parent grid index.
+    Flat single create_grid level only. Indexed by the lo corner
+    (xlo,ylo,zlo), not the center: SPARTA split cells keep the parent's
+    lo/hi bounds but get their own centroids, so indexing by center gives
+    extra positions (53464 rows vs 53460 = 60*27*33 cells, from 4 split
+    cells).
     """
     if len(frame.columns) != NCOL:
         raise FieldFormatError(
@@ -111,9 +96,7 @@ def reshape_grid(frame):
     fields = {}
     for name, pos in FIELD_POS.items():
         total = np.zeros((nx, ny, nz))
-        # Accumulate rather than assign: a split cell's surviving sub-cells
-        # (after the ceiling filter) share one grid index, so average them
-        # instead of letting the last one silently win.
+        # split sub-cells share one grid index, so average them
         np.add.at(total, (ix[keep], iy[keep], iz[keep]), d[keep, pos])
         fields[name] = np.where(counts > 0, total / np.maximum(counts, 1), np.nan)
     return xs, ys, zs, fields
@@ -142,9 +125,7 @@ def read_surf(path):
     i += 1
     while lines[i].strip() == "":
         i += 1
-    # Triangle line format is "<id> <type> <p1> <p2> <p3>" (confirmed against
-    # the raw file -- NOT "<id> <p1> <p2> <p3>"). Matches check_surf3d.py's
-    # parsing convention.
+    # triangle lines are "<id> <type> <p1> <p2> <p3>" (same as check_surf3d.py)
     tris = np.zeros((n_tris, 3), dtype=int)
     tri_types = np.zeros(n_tris, dtype=int)
     for k in range(n_tris):
@@ -158,15 +139,10 @@ def read_surf(path):
 def plane_intersection_segments(points, tris, axis, value):
     """Line segments where the mesh crosses the plane `axis == value`."""
     coord = points[:, axis] - value
-    # A triangle nearly parallel to the cutting plane (all 3 vertices within
-    # TANGENT_EPS of it) does not contribute a meaningful edge to the
-    # cross-section outline -- computing one anyway is numerically unstable
-    # (near-zero denominators) and, for a whole coplanar panel (e.g. the gas
-    # inlet cap's flat face sitting almost exactly at a chosen slice value),
-    # produces hundreds of spurious near-arbitrary long segments instead of
-    # the panel's real silhouette, which comes from its *non*-tangent
-    # neighboring triangles at the panel's edge. 1 micron is far below any
-    # real mesh feature here (mm scale) and far above float noise.
+    # Skip triangles with all 3 vertices within TANGENT_EPS of the plane:
+    # near-zero denominators, and a coplanar panel (e.g. the inlet cap face)
+    # gives hundreds of junk segments. Its outline comes from the neighbors.
+    # 1 um is far below mesh features (mm) and far above float noise.
     TANGENT_EPS = 1e-6
     segments = []
     for tri in tris:
@@ -194,25 +170,14 @@ def other_axes(axis):
     return [a for a in (0, 1, 2) if a != axis]
 
 
-# The deck's own `region gas` bounds (in.ne_fluor3d_scoping's
-# `region gas block 0.031 0.082 0.001 0.043 -0.005 0.039`) -- deliberately
-# chosen by the case's author to bound the real interior cavity for particle
-# fill, so it's already inset from the housing's outer flanges/bosses/notch
-# corners. Used as the zoom row's crop+mask: a geometric point-in-polygon
-# test against the raw wall mesh was tried first and repeatedly misclassified
-# corner/notch cells (a global parity test fails for a shell with real wall
-# thickness; a local nearest-segment-normal test then failed at the notch
-# vertices themselves, where no single nearby segment's normal represents
-# the true local outward direction) -- this box sidesteps needing any of
-# that by reusing a bound the deck's author already verified was interior.
+# The deck's `region gas` bounds (in.ne_fluor3d_scoping:
+# `region gas block 0.031 0.082 0.001 0.043 -0.005 0.039`), which sit inside
+# the cavity. Used as the zoom row's crop+mask. Point-in-polygon against the
+# wall mesh misclassified corner/notch cells, so use this box instead.
 GAS_REGION_BOUNDS_M = ((0.031, 0.082), (0.001, 0.043), (-0.005, 0.039))
 
-# Even a cell inside GAS_REGION_BOUNDS_M can be a genuine cut cell right at
-# the real wall (this grid is coarse relative to the geometry -- a known,
-# separately-tracked gap), with reported data still mixing in a sliver of
-# exterior/ballistic flow regardless of where its nominal center falls.
-# Eroding the box inward by roughly one grid cell excludes that boundary
-# layer outright, rather than trying to classify it correctly cell-by-cell.
+# Cells inside the box can still be cut cells at the wall (grid is coarse vs
+# the geometry) and mix in exterior flow. Erode the box by ~1 cell.
 ZOOM_MARGIN_M = 0.005
 
 
@@ -221,8 +186,8 @@ def eroded_bounds(bounds, margin):
 
 
 def cell_centers(lo_coords):
-    """Approximate cell centers from a flat grid's unique lo-bound values
-    (reshape_grid only stores lo-bounds, not hi -- see its docstring)."""
+    """Approximate cell centers from the unique lo-bound values
+    (reshape_grid only keeps lo-bounds)."""
     dx = np.median(np.diff(lo_coords))
     return lo_coords + dx / 2
 
@@ -260,17 +225,12 @@ def plot_slice(ax, xs, ys, zs, fields, field, axis, index, surf, cmap, norm, lim
 
 
 def crop_norm(fields, field, xs, ys, zs, bbox, cmap_default, vmax_override, percentile=75):
-    """A (cmap, norm) pair scaled only to cells inside `bbox` -- so a small
-    real interior signal isn't washed out by a much larger one elsewhere in
-    the domain on a shared scale (see plot_slice's caller).
+    """(cmap, norm) scaled to cells inside `bbox` only, so the small interior
+    signal isn't washed out by the exterior.
 
-    Even restricted to the cavity, |field| here tends to be bimodal: a calm
-    bulk (median magnitude ~1 m/s in this case) plus a real near-port/wall
-    population running up into cut-cell-artifact extremes (~100 m/s by the
-    98th percentile). The 98th-percentile-of-everything default used for
-    the full-domain scale would just reproduce that problem at a smaller
-    scale here, so this row defaults to a much lower percentile (75th) to
-    actually show the calm bulk instead of being set by its own outliers.
+    Inside the cavity |field| is still bimodal: bulk median ~1 m/s, near
+    port/wall cells up to ~100 m/s at the 98th percentile. So this row uses
+    the 75th percentile to show the bulk.
     """
     (x0, x1), (y0, y1), (z0, z1) = bbox
     xm = (xs >= x0) & (xs <= x1)
@@ -290,8 +250,8 @@ def crop_norm(fields, field, xs, ys, zs, bbox, cmap_default, vmax_override, perc
 
 
 def pick_default_index(fields, axis, weight_field="nrho"):
-    """Slice through the plane with the most mass, so an off-axis port isn't
-    missed by defaulting to the geometric center."""
+    """Slice through the plane with the most mass (the port is off-axis, so
+    the geometric center can miss it)."""
     w = np.nan_to_num(fields[weight_field])
     totals = np.nansum(w, axis=tuple(other_axes(axis)))
     return int(np.argmax(totals))
@@ -307,9 +267,8 @@ def nearest_index(coords, value):
 
 
 def plot_xslices(fig, xs, ys, zs, fields, field, x_values_m, surf, cmap, norm, port_labels, mask_to_cavity=False):
-    """A row of YZ panels (cross-sections perpendicular to the channel axis,
-    x) at the given x positions -- for seeing flow approach/pass/leave a
-    port, since both molecule channels run along x (see port_centroid_x)."""
+    """Row of YZ cross-sections at the given x positions, to see the flow
+    before/at/after a port (both channels run along x, see port_centroid_x)."""
     n = len(x_values_m)
     axs = fig.subplots(1, n, squeeze=False)[0]
     mesh = None
@@ -371,23 +330,16 @@ def main():
     arr = fields[args.field]
     finite = arr[np.isfinite(arr)]
     if args.field in DIVERGING_FIELDS:
-        # The 98th-percentile magnitude, not the raw max: a handful of cells in a
-        # free-streaming exterior plume (100+ m/s) can be two orders of magnitude
-        # above genuine interior-cavity flow (order 1 m/s) on the same case's
-        # grid -- a max-based scale renders the entire interior as flat white
-        # (it isn't 0, it's just small next to those few outliers). --vmax
-        # overrides this when a specific range is wanted instead.
+        # 98th percentile, not max: a few exterior plume cells (100+ m/s) are
+        # ~100x the interior flow (~1 m/s), and a max scale makes the interior
+        # flat white. --vmax overrides.
         vmax = args.vmax if args.vmax is not None else (
             np.percentile(np.abs(finite), 98) if finite.size else 1.0)
         norm = TwoSlopeNorm(vmin=-vmax, vcenter=0.0, vmax=vmax)
         cmap = "RdBu_r"
     else:
-        # Same reasoning as the diverging branch above: nrho/temp can have
-        # the SAME few-outlier-cells problem (a cut-cell density spike near
-        # a port saturating the whole plot to flat purple via matplotlib's
-        # raw min/max default) -- confirmed on this case's real settled
-        # nrho field, not hypothetical. vmin=0 is used for nrho (a real
-        # physical floor) rather than a low percentile.
+        # same outlier problem for nrho/temp (cut-cell density spikes near a
+        # port saturate the plot). vmin=0 for nrho since that's a real floor.
         vmax = args.vmax if args.vmax is not None else (
             np.percentile(finite, 98) if finite.size else 1.0)
         vmin = 0.0 if args.field == "nrho" else (np.percentile(finite, 2) if finite.size else 0.0)

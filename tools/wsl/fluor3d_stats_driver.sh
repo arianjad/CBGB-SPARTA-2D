@@ -2,12 +2,11 @@
 # Login-node driver that tops up BaF+ tracer statistics for the fluor-cell-3d
 # flow scan until each flow has >= TARGET extracted ions (condition COND,
 # default edep; 150 is ~+-16% at 95%) or NMAX traced, then replots.
-# - Keeps up to PERFLOW (default 2) chunks in flight per flow, and at most MAXJOBS in total.
-# - A chunk that times out halves that flow's chunk size (other failures don't).
-# - State lives in each post/ dir: .stats_jobs (id:seed per chunk in
-#   flight), .chunk, .seed. So the script can be killed and restarted.
-# - Polls every 10 min; runs only squeue/sacct and a small classify over
-#   the (small) tracer outputs.
+# Up to PERFLOW (default 2) chunks in flight per flow, MAXJOBS total.
+# A chunk that times out halves that flow's chunk size (other failures don't).
+# State in each post/ dir: .stats_jobs (id:seed per chunk in flight), .chunk,
+# .seed, so it can be killed and restarted. Polls every 10 min; only
+# squeue/sacct and a quick classify of the (small) tracer outputs.
 #   nohup bash tools/wsl/fluor3d_stats_driver.sh > fluor3d_stats_driver.log 2>&1 &
 cd "$HOME/CBGB-SPARTA-2D" || exit 1
 source .venv/bin/activate
@@ -27,9 +26,8 @@ chunk0() { local f=$1 c; if [ "$f" -le 4 ]; then c=6000; elif [ "$f" -le 5 ]; th
            elif [ "$f" -le 25 ]; then c=1200; else c=1000; fi
            python3 -c "print(max(100, int($c * $CHUNKSCALE)))"; }
 TR=tools/wsl/sbatch_fluor3d_tracer_chunk.sh
-# node17xx/node18xx crash inside LLVM while Julia precompiles CSV.jl there
-# (a CPU-type problem, not a race, so retrying doesn't help)
-# (a node range in --exclude must name only existing nodes, so list them)
+# node17xx/node18xx crash in LLVM when Julia precompiles CSV.jl (CPU type, not
+# a race, retrying doesn't help). --exclude ranges must name existing nodes only.
 BADNODES=$(sinfo -p mit_preemptable -h -N -o %N | grep -E "^node1[78][0-9][0-9]$" | sort -u | paste -sd,)
 # TOPT can be overridden, e.g. for quicktest when preemptable is congested:
 #   TOPT="-p mit_quicktest -t 00:15:00 --cpus-per-task=8 --mem=32G" CHUNKSCALE=0.2

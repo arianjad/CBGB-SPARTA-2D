@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
-"""Split a run's frames into two independent halves and plot each with the
-same density-weighted averaging, to distinguish real geometric/mesh
-streaking (same streaks in both halves) from genuine statistical noise
-(different streaks in each half, since the halves are independent samples).
+"""Plot two independent halves of a run's frames with the same
+density-weighted averaging. Streaks in both halves are mesh/geometry;
+streaks in only one are noise.
 """
 import os
 import sys

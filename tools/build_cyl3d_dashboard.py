@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the plain-cylinder scan dashboard as a small static site for the Artifact page:
+"""Build the plain-cylinder scan dashboard as a small static site:
 
   results/dashboard/site/index.html     the page; all run data embedded as JSON
   results/dashboard/site/fig/*.png      scan figures (tools/plot_cyl3d_scan.py)
@@ -10,13 +10,12 @@
                                         themselves are cached in results/dashboard/runpng.
   results/dashboard/site/run/F_E.gif    trajectory GIF, downscaled to 560 px wide
 
-The page lists one row per flow; a click expands it into its energies, and a click
-on an energy shows that run's GIF, figure and numbers. Images are separate files so
-the page stays small; only new or changed files need re-uploading:
-results/dashboard/site/to_publish.json lists them (published path -> local path, or null for a published
-file that is gone and should be removed). After a successful publish run with --mark-published to record them.
+One row per flow, expanding into energies; clicking an energy shows that run's GIF,
+figure and numbers. Images are separate files so only new or changed ones need
+re-uploading: results/dashboard/site/to_publish.json lists them (published path -> local
+path, or null for a file to remove). Run with --mark-published after publishing.
 
-Light work (small CSVs, incremental image conversion), fine on the login node.
+Light (small CSVs, incremental image conversion), fine on the login node.
 Usage: python tools/build_cyl3d_dashboard.py [--runbase cyl-scan] [--cond table-central] [--mark-published]
 """
 import argparse
@@ -179,11 +178,10 @@ def run_figure(d, cond, E, f, r, tr, ke, out):
 
 
 def small_gif(src, out):
-    """Downscale a trajectory GIF to GIF_W wide. All frames share one palette built
-    from the first, middle and last frames, without dithering, so the small fate
-    colours (blue extracted, orange wall, green back out) survive: quantizing each
-    frame on its own let the large grey areas take the palette and mapped those
-    dots to brown (fixed 2026-10-04)."""
+    """Downscale a trajectory GIF to GIF_W wide. One shared palette from the first,
+    middle and last frames, no dithering, so the small fate colours (blue extracted,
+    orange wall, green back out) survive; per-frame quantizing let the grey areas take
+    the palette and turned those dots brown."""
     from PIL import Image, ImageSequence
     im = Image.open(src)
     rgb = [f.convert("RGB") for f in ImageSequence.Iterator(im)]   # convert while iterating (frames share one object)

@@ -9,7 +9,7 @@
 
 # Post-processing for one flow of the fluor-cell-3d scan (sbatch_fluor3d_scan.sh):
 #   sbatch --export=ALL,SCCM=8[,NPART=1000] tools/wsl/sbatch_fluor3d_scan_post.sh
-# Writes the following into RUNDIR/post/:
+# Writes into RUNDIR/post/:
 #   1. asymmetry.txt: half-space asymmetry and settling check over the last
 #      75 ms (tools/fluor3d_asymmetry.py).
 #   2. frozen.grid: the last 20 ms time-averaged into one frame
@@ -41,8 +41,8 @@ OUT="$RUNDIR/post"; mkdir -p "$OUT"
 
 source tools/wsl/site_env.sh; site_python   # ORCD or subMIT
 source .venv/bin/activate
-# streaming freeze (one frame in memory; identical output to field3d_freeze_avg.py, which
-# needed >400 GB on the 11.5M-cell grid); it also prints the chamber summary line.
+# streaming freeze, one frame in memory (field3d_freeze_avg.py gives the same output but
+# needed >400 GB on the 11.5M-cell grid); also prints the chamber summary line.
 # ASYM_FRAMES=0 skips the full asymmetry check, which loads all its frames at once.
 python tools/field3d_freeze_stream.py "$RUNDIR/field.grid" --out "$OUT/frozen.grid" --span-steps "$SPAN" --max-frames "$NFREEZE" > "$OUT/freeze.log"
 if [ "$NASYM" -gt 0 ]; then
@@ -52,9 +52,8 @@ else
 fi
 cp -n cases/fluor-cell-3d/cell_fluor3d_sealed.surf "$OUT/"
 
-# NPART=0: field prep only -- run the tracer afterwards in pieces with
-# sbatch_fluor3d_tracer_chunk.sh (needed at high flow, where 3 x 1000 ions
-# don't fit in 15 min)
+# NPART=0: field prep only; run the tracer later in pieces with
+# sbatch_fluor3d_tracer_chunk.sh (high flow: 3 x 1000 ions don't fit in 15 min)
 [ "$NPART" = 0 ] && { echo "prep only (NPART=0)"; exit 0; }
 JULIA="$SLURM_SUBMIT_DIR/.local/julia-1.9.4/bin/julia"
 cd "$OUT"

@@ -118,15 +118,11 @@ def _parse_frame(path: Path, raw: str, final: bool) -> tuple[Frame, bool]:
 def read_complete_frames(path: str | Path, tail_bytes: int | None = None) -> FrameSet:
     """Return complete frames, ignoring only an incomplete final frame.
 
-    If tail_bytes is given and smaller than the file's size, only that many
-    bytes from the end of the file are read/decoded, and the (possibly
-    truncated) first frame in that window is discarded. For a large
-    multi-GB append-only dump where only a recent fraction of frames is
-    actually needed (e.g. average_tail's frac), this avoids reading,
-    decoding, and then re-slicing the *entire* file into memory -- which for
-    a several-GB file multiplies far past its on-disk size (full read +
-    decoded str + one substring copy per frame) and can exhaust available
-    RAM even when the caller only wanted the last 25% of frames.
+    If tail_bytes is given and smaller than the file, only that many bytes
+    from the end are read, and the (possibly truncated) first frame in that
+    window is dropped. For multi-GB dumps where only the last frames are
+    needed (e.g. average_tail's frac): a full read costs several times the
+    file size in RAM (bytes + decoded str + a copy per frame).
     """
     source = Path(path)
     # Take one finite snapshot rather than letting a concurrently appending

@@ -1,8 +1,8 @@
-# Resume in.he_takahashi_3d_run from a SPARTA restart file after a job was
-# killed (walltime limit, node failure, preemption) before finishing.
+# Resume in.he_takahashi_3d_run from a restart file after a killed job
+# (walltime, node failure, preemption).
 # Pass RESTARTFILE (e.g. restart.chunk3), MDOT, FILLN, FNUM, DT,
 # CHECKPOINT_STEPS, and NCHUNKS (remaining chunks to run) with -var.
-# field.grid is appended to, not overwritten, so the dump history is kept.
+# field.grid is appended to, not overwritten.
 seed        8675309
 read_restart ${RESTARTFILE}
 global      mem/limit 1900

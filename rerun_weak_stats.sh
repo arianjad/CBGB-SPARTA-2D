@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Boost statistics for the 4 weak-spot tracer runs identified: SCCM=1
-# gaussball/uniformball (Fig 3's noisiest points, ~22-30% rel err at N=5000)
-# and SCCM=20 gaussball/uniformcell (Fig 4 histogram + Fig 5 heatmap, both
-# wanted better sampling). Reuses the already-converted field data.
+# More statistics for 4 noisy tracer runs: SCCM=1 gaussball/uniformball
+# (Fig 3's noisiest points, ~22-30% rel err at N=5000) and SCCM=20
+# gaussball/uniformcell (Fig 4 histogram, Fig 5 heatmap).
+# Reuses the converted field data.
 set -uo pipefail
 cd ~/CBGB-SPARTA-2D
 JULIA=".local/julia-1.9.4/bin/julia"

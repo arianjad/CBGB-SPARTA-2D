@@ -1,13 +1,10 @@
 #!/usr/bin/env python3
-"""Azimuthally bin a true-3D SPARTA grid dump (Cartesian x,y,z cells, no
-axisymmetric ring-averaging trick) into (x, r=sqrt(y^2+z^2)) bins, so an
-on-axis 3D run can be visually compared against the 2D-axisymmetric result
-in the same style as tools/plot_fig1_style.py.
+"""Bin a 3D SPARTA grid dump (Cartesian cells) into (x, r=sqrt(y^2+z^2)) for
+comparison with the 2D-axisymmetric result, in the style of
+tools/plot_fig1_style.py.
 
-Reads only a byte-sized tail of the (possibly still-growing) dump, so it is
-safe to re-run periodically WHILE the solver is still running, without
-loading the whole multi-GB file (see field_io.read_complete_frames'
-tail_bytes) and without needing the run to finish first.
+Reads only a tail of the dump (field_io.read_complete_frames tail_bytes), so
+it can be re-run while the solver is still writing.
 
 Usage: python tools/plot_field_3d.py RUN_DIR --out OUT.png [--csv-out OUT.csv]
        [--frac F] [--nr N]
@@ -47,35 +44,19 @@ def load_tail_frames(path, frac):
 def bin_axisymmetric(frames, nr):
     """Volume- and density-weighted (x, r) bins from one or more 3D frames.
 
-    Processes one frame at a time and accumulates running bincount sums,
-    rather than concatenating every column across all frames first -- for
-    dozens of multi-GB frames, holding N full extra copies alongside the
-    already-parsed frame data is what actually exhausts memory, not the
-    parsing itself. Geometry (x_edges/r_edges) is static across frames, so
-    it only needs to be derived once, from the first frame.
+    One frame at a time with running bincount sums; concatenating all frames
+    first runs out of memory on multi-GB dumps. Bin edges come from the
+    first frame.
 
-    Pooling many cells per (x, r) bin suppresses genuine per-Cartesian-cell
-    shot noise in the sparse far-field plume. Cells are weighted by nrho
-    alone (matching plot_fields_b5.average_tail's exact convention), NOT by
-    nrho*volume: a cell cut by the curved cell wall reports a correct
-    density for its own (much smaller than bounding-box) true gas volume,
-    but the dump has no separate cut-volume field, so weighting by the full
-    bounding-box volume massively over-credits those cells (observed:
-    reported densities up to ~2.7e24 m^-3 outside the wall, ~100x anything
-    in the real flow).
+    Cells are weighted by nrho only (same as plot_fields_b5.average_tail),
+    not nrho*volume. Wall-cut cells have a small true gas volume but the dump
+    only has the bounding box, so volume weighting over-counts them (seen up
+    to ~2.7e24 m^-3 outside the wall, ~100x the real flow).
 
-    Bin edges are uniform, sized to the COARSEST cell present (with a
-    safety margin), not derived from the finest cells in the domain: this
-    mesh has a small centrally-refined region (400um cells) inside an
-    otherwise coarse (1600um-x / 1040um-y,z) base grid. Deriving edges from
-    the finest cells anywhere produces bins narrower than the coarse
-    cells -- a coarse cell's single center point then lands in only one of
-    several such narrow bins, leaving the other, physically-covered bins
-    at that same radius/column empty. That "point-sample split across
-    finer-than-actual-resolution bins" was the real cause of the periodic
-    (period = coarse/fine width ratio) striping, not aliasing in general
-    and not the nrho-ceiling issue above (confirmed: identical striping
-    with and without that fix).
+    Bins are uniform and sized to the coarsest cell (plus margin). The mesh
+    has a refined core (400um) in a coarse base grid (1600um x, 1040um y,z);
+    bins sized to the fine cells leave empty stripes where a coarse cell
+    center falls in only one of several narrow bins.
     """
     d0 = frames[0].data
     xlo0, xhi0 = d0[:, 4], d0[:, 7]
@@ -102,12 +83,9 @@ def bin_axisymmetric(frames, nr):
     v_num = np.zeros(nbins)
     t_num = np.zeros(nbins)
 
-    # Cells cut by the curved cell wall can report a wildly inflated nrho
-    # (observed up to ~2.7e24 m^-3, vs ~1.4e22 anywhere in the real flow) --
-    # a per-cell reporting artifact from a tiny true cut volume, not a real
-    # density. NRHO_CEILING excludes such cells from every average (not
-    # just downweights them: even bare nrho, without the volume factor
-    # above, would still swamp a weighted mean at that magnitude).
+    # Wall-cut cells can report nrho up to ~2.7e24 m^-3 (vs ~1.4e22 in the
+    # real flow), an artifact of the tiny cut volume. Drop them entirely;
+    # at that size they swamp even an nrho-weighted mean.
     NRHO_CEILING = 1e23
 
     for f in frames:

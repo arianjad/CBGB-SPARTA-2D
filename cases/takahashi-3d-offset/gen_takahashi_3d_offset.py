@@ -1,17 +1,15 @@
 #!/usr/bin/env python3
-"""Takahashi single-stage cell in true 3D, with the inlet tube shifted
-off-axis -- a controlled test of whether an off-axis inlet by itself
-produces the asymmetric exterior plume seen in cases/fluor-cell-3d.
+"""Takahashi single-stage cell in 3D with the inlet tube shifted off-axis.
+Tests whether an off-axis inlet alone gives the asymmetric exterior plume
+seen in cases/fluor-cell-3d.
 
 Same dimensions as gen_takahashi_3d.py (12.7mm ID cell, 53mm body, 4mm ID
-x 20mm inlet tube, 5mm aperture through a 0.5mm plate, solid outer body of
-radius RTOP_GEOM). The only change: the inlet tube's axis is at y=Y_OFFSET
-instead of on the cell axis, so the end wall at x=0 becomes a disc with an
-off-center hole. Aperture stays on-axis.
+x 20mm inlet tube, 5mm aperture through a 0.5mm plate, outer body radius
+RTOP_GEOM), except the tube axis is at y=Y_OFFSET, so the x=0 end wall is a
+disc with an off-center hole. Aperture stays on-axis.
 
-Normals point OUT of the solid (into gas / into the exterior), as SPARTA
-requires; each triangle is flipped if needed to agree with an analytically
-known desired normal for its surface.
+Normals point out of the solid (into gas/exterior); each triangle is flipped
+to match the known normal of its surface.
 """
 import math
 import os

@@ -1,19 +1,17 @@
 #!/usr/bin/env python3
-"""Takahashi single-stage cell in true 3D with the inlet tube entering
-through the SIDE wall (from -z, perpendicular to the cell axis), near the
-back wall -- mirroring cases/fluor-cell-3d, whose gas inlet cap sits on the
-housing's bottom face near the back. Controlled test of whether that
-inlet orientation alone produces the asymmetric exterior plume seen there.
+"""Takahashi single-stage cell in 3D with the inlet tube entering through
+the side wall (from -z, perpendicular to the axis) near the back wall, like
+the gas inlet in cases/fluor-cell-3d. Tests whether that inlet orientation
+alone gives the asymmetric exterior plume seen there.
 
 Same dimensions as gen_takahashi_3d.py (12.7mm ID x 53mm cell, 5mm
-aperture through a 0.5mm plate, 4mm ID x 20mm inlet tube, solid outer body
-of radius RTOP_GEOM). A tube-into-cylinder intersection can't be
-triangulated watertight by simple revolution, so this builds the solid
-with gmsh's OpenCASCADE kernel (outer body minus gas region) and meshes
-its boundary.
+aperture through a 0.5mm plate, 4mm ID x 20mm inlet tube, outer body radius
+RTOP_GEOM). The tube-cylinder intersection can't be done by revolution, so
+the solid is built with gmsh/OpenCASCADE (outer body minus gas) and its
+boundary meshed.
 
-gmsh's pip wheel needs libGLU, absent on ORCD nodes; one was installed to
-~/opt/glu-env via conda-forge -- run with
+gmsh's pip wheel needs libGLU, missing on ORCD nodes (installed to
+~/opt/glu-env via conda-forge):
   LD_LIBRARY_PATH=~/opt/glu-env/lib python gen_takahashi_3d_side.py
 """
 import math
@@ -84,11 +82,9 @@ for dim, tag in gmsh.model.getBoundary([(3, vol)], oriented=False):
             triangles.append((ttype, int(en[k]), int(en[k+1]), int(en[k+2])))
 gmsh.finalize()
 
-# gmsh's oriented-boundary signs came back inconsistent for a few surfaces
-# of this boolean solid, so orientation is made consistent here instead:
-# walk triangle-to-triangle across shared edges, flipping any neighbor that
-# traverses the shared edge in the same direction (on a closed manifold,
-# neighbors must traverse it in opposite directions).
+# gmsh's boundary orientation is inconsistent on a few surfaces of this
+# boolean solid, so fix it here: walk across shared edges and flip any
+# neighbour that traverses the edge in the same direction.
 edge_tris = {}
 for i, (_, a, b, c) in enumerate(triangles):
     for u, v in ((a, b), (b, c), (c, a)):
@@ -121,8 +117,7 @@ def signed_volume(tris):
     return s / 6.0
 
 
-# SPARTA wants normals pointing OUT of the solid; for a consistently wound
-# closed surface that's equivalent to positive signed volume.
+# SPARTA wants normals out of the solid = positive signed volume.
 if signed_volume(triangles) < 0:
     triangles = [(t, a, c, b) for t, a, b, c in triangles]
 

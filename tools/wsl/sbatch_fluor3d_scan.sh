@@ -23,8 +23,8 @@
 # ~4-8 SCCM (lambda ~ 0.4mm x 4/SCCM). Higher flows are under-resolved:
 # the stagnant-chamber state is fine, the port flow only approximate.
 #
-# How the chain runs:
-# - Default partition is mit_quicktest. Each job runs MAXCHUNKS
+# Chain:
+# - Default partition mit_quicktest. Each job runs MAXCHUNKS
 #   averaging windows (sized to fit 15 min), then resubmits itself until
 #   the flow reaches TOTAL. Pass CHAIN=0 to stop that; NICE=<n> lowers
 #   the chain's priority; CHAIN_TIME=<hh:mm:ss> sets each job's walltime, e.g.
@@ -33,10 +33,10 @@
 #     sbatch -p mit_preemptable -t 00:30:00 --export=ALL,SCCM=10,MAXCHUNKS=4,CHAIN_TIME=00:30:00 ...
 # - The same script also works on other partitions (sbatch -p ... -t ...;
 #   pass MAXCHUNKS=0 for "run to the end").
-# - A per-flow lock (mkdir is atomic) lets only one job at a time work on a
-#   flow, whichever partition starts first; a job finding the lock held by
-#   another live job re-queues itself for 30 min later, so the chain
-#   survives if that other job dies (e.g. a mit_normal walltime kill).
+# - Per-flow lock (mkdir is atomic): one job per flow at a time, whichever
+#   partition starts first. A job that finds the lock held by a live job
+#   requeues itself 30 min later, so the chain survives if that job dies
+#   (e.g. mit_normal walltime kill).
 # - EXCLUDE=<nodes> is passed to every job in the chain (slow nodes). It goes
 #   through --export, which splits on commas: use a range like node[2000-2027].
 # - Resumes from the newest complete checkpoint and trims field.grid back
@@ -62,7 +62,7 @@ source "$SLURM_SUBMIT_DIR/tools/wsl/site_env.sh"; site_mpi   # ORCD or subMIT mo
 
 : "${SCCM:?pass SCCM=<flow> via --export}"
 source "$SLURM_SUBMIT_DIR/tools/wsl/fluor3d_flow_params.sh"
-flow_params "$SCCM"   # DT, DUMPFREQ, CHUNKS_QT, TOTAL -- see that file
+flow_params "$SCCM"   # DT, DUMPFREQ, CHUNKS_QT, TOTAL (see that file)
 MAXCHUNKS="${MAXCHUNKS:-$CHUNKS_QT}"
 GRIDREF="${GRIDREF:-8}"; RUNBASE="${RUNBASE:-fluor-scan}"; INPUT="${INPUT:-sealed}"; PORTREF="${PORTREF:-4}"
 DT="${DT_SET:-$DT}"

@@ -1,7 +1,6 @@
-"""Extract on-axis aperture-exit conditions (nrho, u, T) from one SPARTA
-run's field.grid, compute Mach number M and Reynolds number R, and append
-the result as one row to a CSV. Run once per SCCM point (one process each,
-to keep memory bounded -- see wsl_sparta_gotchas memory).
+"""On-axis aperture-exit nrho, u, T from one run's field.grid -> Mach M and
+Reynolds R, appended as one CSV row. One process per SCCM point to keep
+memory bounded.
 
 Usage: python3 extract_fig2_data.py <sccm> <run_dir> <out_csv>
 """
@@ -20,10 +19,10 @@ out_csv = sys.argv[3]
 path = os.path.join(run_dir, "field.grid")
 d = average_tail(path, 0.25)  # last 25% of frames; also gives full convergence trend
 x = d["xc"]; y = d["yc"]
-# window ends AT the aperture exit plane (0.0535), not past it -- extending even
-# 1-2mm downstream samples the free-jet expansion (n drops, M rises fast there)
-# and inflates M while barely moving R. Confirmed on sccm1: this window gives
-# M=0.68 vs paper's read ~0.61, while the old 0.0530-0.0550 window gave M=1.04.
+# window ends at the aperture exit plane (0.0535). Going even 1-2 mm downstream
+# samples the free-jet expansion (n drops, M rises fast) and inflates M while
+# barely moving R. sccm1: M=0.68 here vs ~0.61 read off the paper; the
+# 0.0530-0.0550 window gave M=1.04.
 mask = (x > 0.0525) & (x < 0.0535) & (y < 0.0008)
 idx = np.where(mask)[0]
 nrho = d["nrho"][idx]; u = d["u"][idx]; t = d["t"][idx]
@@ -42,7 +41,7 @@ lam = 1.0 / (2 ** 0.5 * nrho_avg * sigma)
 K = lam / 0.005
 R = 2 * M / K
 
-# convergence check: how much did bulk density drift over the run?
+# convergence check: bulk density drift over the run
 trend = d["trend"]
 drift_pct = 100.0 * (trend[-1][1] - trend[0][1]) / trend[-1][1]
 

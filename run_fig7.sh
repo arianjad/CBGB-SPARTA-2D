@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
-# Fig.7: median SrF forward velocity (vz) vs. distance from the exit
-# aperture, for each of the 7 main-sweep SCCM points. Reuses the already-
-# converted He field data under results/molecules/fig345/sccmN/field/.
-# Gaussball spawn (same central distribution as Fig.3/4) for consistency.
+# Fig.7: median SrF forward velocity (vz) vs distance from the exit aperture
+# for the 7 main-sweep SCCM points. Reuses the He fields in
+# results/molecules/fig345/sccmN/field/. Gaussball spawn, same as Fig.3/4.
 set -uo pipefail
 cd ~/CBGB-SPARTA-2D
 JULIA=".local/julia-1.9.4/bin/julia"
@@ -51,7 +50,7 @@ for sccm in 1 2 4 8 23 58 127; do
       tail -4 "$tdir/run.log"
     fi
 
-    # extract median vz over extracted (have=1) particles, append to results csv
+    # median vz over extracted (have=1) particles -> results csv
     python3 - "$tdir/recs.csv" "$sccm" "$d" "$xobs" "$RESULTS_CSV" <<'PYEOF'
 import csv, sys, statistics
 recs_path, sccm, d, xobs, out_path = sys.argv[1:6]

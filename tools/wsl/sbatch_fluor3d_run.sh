@@ -15,8 +15,7 @@ module purge
 module load gcc/12.2.0 openmpi/4.1.4
 
 CASEDIR=cases/fluor-cell-3d
-# Same convention as tools/wsl/sbatch_3d_run.sh: large/fast-growing dump goes
-# on $SCRATCH, not $HOME (200GB, shared with everything else).
+# big dump goes on scratch, not $HOME (200GB, shared)
 RUNDIR="$HOME/orcd/scratch/cbgb-sparta-3d/fluor-cell-3d-ne"
 PLOT_MODULE_PY="deprecated-modules gcc/12.2.0-x86_64 python/3.10.8-x86_64"
 
@@ -25,21 +24,15 @@ cp -n "$CASEDIR"/in.ne_fluor3d_run "$CASEDIR"/in.ne_fluor3d_resume \
       "$CASEDIR"/cell_fluor3d.surf "$CASEDIR"/ne.species "$CASEDIR"/ne.vss "$RUNDIR/"
 cd "$RUNDIR"
 
-# Checkpointed (mirrors cases/takahashi-3d's in.he_takahashi_3d_run/_resume
-# pattern): writes a SPARTA restart file every CHECKPOINT_STEPS, so a job
-# killed early (walltime limit, node failure) doesn't lose all progress --
-# resume from the latest restart.<step> file with in.ne_fluor3d_resume
-# (see docs/hpc-fluor-cell-3d-handoff.md for how to check that). Chunked to
-# match the field.grid dump cadence (20000 steps/frame): 6 chunks x 20000 =
-# 120000 steps total (12ms simulated) -- the same He-case-derived starting
-# point as before, NOT yet verified sufficient for this grid/geometry. If
-# the settled-field check shows it isn't settled, resume with more chunks
-# instead of restarting from scratch.
+# Restart file every CHECKPOINT_STEPS (as in cases/takahashi-3d); resume a killed
+# job from the latest restart.<step> with in.ne_fluor3d_resume
+# (docs/hpc-fluor-cell-3d-handoff.md). Chunks match the field.grid cadence
+# (20000 steps/frame): 6 x 20000 = 120000 steps (12 ms), taken from the He case
+# and not yet checked for this geometry. If not settled, resume with more chunks.
 NCHUNKS=6
 CHECKPOINT_STEPS=20000
 
-# --- background progress-plot monitor, same pattern as sbatch_3d_run.sh:
-# reads only a tail of the growing field.grid, safe while solver is live.
+# background progress plot; reads only the tail of field.grid, safe while running
 (
   cd "$SLURM_SUBMIT_DIR"
   module purge
@@ -56,16 +49,11 @@ CHECKPOINT_STEPS=20000
 ) &
 monitor_pid=$!
 
-# FNUM=1e11, not the doc's original 2.5e17 (carried over from the 2D
-# cases/b5-lean case, which turned out wrong by ~5-6 orders of magnitude for
-# this geometry -- 2.5e17 produced ZERO simulated particles for the entire
-# duration of an earlier 120000-step run, since it rounds both the initial
-# fill and the mflow injection rate to 0). Chosen via a short 3-point
-# mit_quicktest scan (1e12/5e11/1e11, 10000 steps each): all three gave
-# adequate per-cell statistics, but all were also trivially cheap relative
-# to the 6h budget here, so 1e11 (~667 particles/occupied cell, ~30min
-# extrapolated) was picked for the extra statistics near the under-resolved
-# small ports, not because it was the minimum that worked.
+# FNUM=1e11. The 2.5e17 from the 2D b5-lean case gives zero particles here (fill
+# and mflow injection both round to 0). Quicktest scan of 1e12/5e11/1e11 (10000
+# steps each) all had enough per-cell statistics and were cheap, so 1e11
+# (~667 particles/occupied cell, ~30 min extrapolated) for better statistics
+# near the small, under-resolved ports.
 mpirun -np "$SLURM_NTASKS" "$HOME/opt/sparta-27Aug2026/bin/spa_mpi" \
   -in in.ne_fluor3d_run \
   -var MDOT 6.002164e-08 -var FILLN 5.4e21 -var FNUM 1e11 -var DT 1e-7 \

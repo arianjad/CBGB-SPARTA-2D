@@ -2,21 +2,12 @@
 """Freeze one complete frame from a 3D SPARTA grid dump for
 ParticleTracing3D.jl.
 
-Unlike field2tracer.py (the 2D converter), this does NOT reformat data or
-remap axes -- ParticleTracing3D.jl reads the raw SPARTA Cartesian grid dump
-format directly (id xc yc zc xlo ylo zlo xhi yhi zhi ... , the same 9-line
-ITEM: header SPARTA itself writes), and reads cell_fluor3d.surf directly
-too (no cell.surfs-style conversion needed for 3D). The ONLY thing needed
-before the tracer can read field.grid is picking ONE frame out of the
-raw file's multiple append-only snapshots -- field.grid accumulates one
-block per `dump grid` interval over the whole run, and reading it with a
-simple fixed-header-line parser (skipto=10, as ParticleTracing3D.jl does)
-is only correct for a SINGLE frame, not the whole multi-frame file.
-
-This reuses field_io.py's frame parsing directly rather than
-reimplementing frame-boundary detection (What counts as a complete vs.
-truncated trailing frame, from a run that may still be in progress, is
-exactly the kind of thing worth not getting wrong twice.)
+Unlike field2tracer.py (2D), no reformatting or axis remapping:
+ParticleTracing3D.jl reads the raw SPARTA grid dump (id xc yc zc xlo ylo zlo
+xhi yhi zhi ..., 9-line ITEM: header) and cell_fluor3d.surf directly. But
+field.grid holds one block per `dump grid` interval, and the tracer's reader
+(skipto=10) only handles a single frame, so pick one out here.
+Frame parsing (complete vs truncated trailing frame) comes from field_io.py.
 
 Usage: python tools/field3d_freeze.py RUN_DIR --out OUTPUT_FILE [SELECTION]
   (same --timestep / --until-step / --until-ms / --dt selection flags as

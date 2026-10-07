@@ -19,19 +19,13 @@ RUNDIR="$HOME/orcd/scratch/cbgb-sparta-3d/fluor-cell-3d-ne"
 cp -n "$CASEDIR"/in.ne_fluor3d_resume "$RUNDIR/"
 cd "$RUNDIR"
 
-# mit_quicktest instead of mit_normal: mit_normal had ~1100-1400 jobs queued
-# and this same-sized job (6 chunks x 20000 steps) took only 9m32s once it
-# actually ran -- comfortably inside quicktest's 15-min cap, and quicktest's
-# queue is far shorter (its own separate, higher-priority queue). If a
-# future continuation ever DOES run long enough to hit the 15-min limit,
-# checkpointing means nothing is lost -- just resume again from whatever
-# restart.*.<step> file was last written.
+# mit_quicktest: mit_normal had ~1100-1400 jobs queued, and 6 chunks x 20000
+# steps took 9m32s, inside the 15-min cap. If it hits the cap, just resume
+# again from the last restart.*.<step> file.
 #
-# RESTARTFILE must match the process count used at write time (SPARTA
-# redistributes across a different count on read, but doing so here failed
-# with "ghost cells do not exist" during a mismatched-NP validation test --
-# not actually a deck bug, just untested with mismatched NP, so keep NP=40
-# consistent with the original run unless deliberately changing it).
+# Keep NP=40 (same as the run that wrote RESTARTFILE). SPARTA can redistribute
+# to a different count on read, but a mismatched-NP test here failed with
+# "ghost cells do not exist".
 RESTARTFILE="${RESTARTFILE:-restart.%.120000}"
 NCHUNKS="${NCHUNKS:-6}"
 CHECKPOINT_STEPS="${CHECKPOINT_STEPS:-20000}"

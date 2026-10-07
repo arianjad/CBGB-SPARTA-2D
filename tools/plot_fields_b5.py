@@ -25,10 +25,9 @@ def read_frames(path, timestep=None, until_step=None, until_ms=None, dt=None, ta
     """Return (steps, box, cells) with cells[k] = (Ncell, 11) sorted by id.
 
     Only complete, nonempty frames are eligible. Bounds include their endpoint.
-    tail_bytes, if given, limits the read to that many bytes from the end of
-    the file (see read_complete_frames) -- pass this only when the caller
-    doesn't need frames older than that window (e.g. a frac-based tail
-    average), since it makes earlier frames simply unavailable.
+    tail_bytes, if given, reads only that many bytes from the end of the file
+    (see read_complete_frames). Older frames are then unavailable, so only
+    use it for a frac-based tail average.
     """
     result = read_complete_frames(path, tail_bytes=tail_bytes)
     known_dt = resolved_dt(os.path.dirname(path), dt) if dt is not None else recorded_dt(os.path.dirname(path))
@@ -57,13 +56,10 @@ def average_tail(path, frac=0.5, timestep=None, until_step=None, until_ms=None, 
                   fast_tail=False):
     """Mean field over the last `frac` of the non-empty frames.
 
-    fast_tail=True (only valid with timestep/until_step/until_ms all None)
-    reads just a generous byte-sized tail slice of the file instead of the
-    whole thing -- for a several-GB append-only dump this avoids the full
-    read+decode+per-frame-slice memory multiplication that can exhaust RAM
-    even though only the last `frac` of frames is actually needed. The
-    resulting `trend` is then only computed over that partial window (see
-    trend_full=False in the returned dict), not the whole run.
+    fast_tail=True (only with timestep/until_step/until_ms all None) reads
+    just a padded tail slice of the file. Several-GB dumps otherwise run out
+    of RAM. `trend` is then computed over that partial window only
+    (trend_full=False in the returned dict).
     """
     tail_bytes = None
     if fast_tail:
@@ -84,13 +80,10 @@ def average_tail(path, frac=0.5, timestep=None, until_step=None, until_ms=None, 
         if not np.array_equal(fr[:, 0], ids):
             raise SystemExit("grid changed between frames in %s" % path)
     geom = sel[0][:, 1:7]
-    # nrho is legitimately averaged per-frame equally (each frame is already a
-    # valid density estimate for its window). But u/v/t are intensive
-    # quantities: a frame where this cell had ~0 particles reports a noisy/
-    # near-zero value for them, and giving that frame equal weight against
-    # well-populated frames systematically biases sparse cells (e.g. near the
-    # symmetry axis) low. So weight u/v/t by each frame's own nrho at that
-    # cell, not by frame count, and exclude cells with zero total weight.
+    # nrho: plain mean over frames. u/v/t are intensive, and a frame with ~0
+    # particles in a cell gives a noisy/near-zero value, which biases sparse
+    # cells (near the axis) low. So weight u/v/t by each frame's nrho and
+    # skip cells with zero total weight.
     stack = np.stack([fr[:, 7:] for fr in sel])  # (nframes, ncells, 4): nrho,u,v,t
     nrho_frames = stack[:, :, 0]
     nrho_mean = nrho_frames.mean(axis=0)

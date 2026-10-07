@@ -7,33 +7,27 @@ buffer gas beams", Phys. Rev. Research 3, 023018 (2021), Sec. III.A:
 length, 5 mm aperture diameter, 0.5 mm plate thickness. The inlet cap is a
 reflecting 4 K surface with prescribed mass injection, same as the B5 case.
 
-Unlike the B5 case (which truncates its inlet to a short "simulated feed
-stub"), this case models the full 20 mm inlet tube length exactly as given
-in the paper, since the paper does not describe a truncation.
+Unlike B5 (short feed stub), the full 20 mm inlet tube is modeled, since the
+paper doesn't describe a truncation.
 
-The .surf polygon itself only closes at RTOP_GEOM (~7 mm, just enough to
-cleanly cap the actual hardware): the plate/cell wall does NOT get any
-bigger. What gets bigger is the *simulated domain* around it -- out to
-RTOP_DOMAIN and XHI far beyond the hardware -- so the wide-angle jet
-backflow/backscatter off the plate's downstream face has real vacuum space
-to expand into, rather than being clipped by an artificially close boundary.
+The .surf polygon closes at RTOP_GEOM (~7 mm, just the hardware). The
+simulated domain extends much further (RTOP_DOMAIN, XHI) so the wide-angle
+backflow off the plate's downstream face has vacuum to expand into instead
+of hitting a close boundary.
 
-Mesh: a coarse outer base plus 5 nested refinement levels (2 new bridging
-levels added on top of the original 3, to step down from the new coarse
-outer base to the same validated fine mesh used near the cell/aperture).
-Each level spans the full radial extent so there are no internal radial
-refinement boundaries to manage -- only axial ones. Each level-N band sits
-inside its level-(N-1) parent by at least four level-(N-1) cells on every
-open (axial) side, per the same nesting rule used in gen_b5.py, checked by
-tools/check_grid_2d.py.
+Mesh: coarse outer base plus 5 nested levels (2 bridging levels down to the
+original 3 fine levels near the cell/aperture). Each level spans the full
+radial extent, so only axial refinement boundaries. Each level-N band sits
+inside its parent by >= 4 parent cells on every open (axial) side, as in
+gen_b5.py, checked by tools/check_grid_2d.py.
 
-Run from the repository root: python cases/takahashi-single/gen_takahashi.py
+Usage (from the repo root): python cases/takahashi-single/gen_takahashi.py
 """
 import os
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
-# ---- paper geometry (Sec. III.A) -- UNCHANGED from the original case ----
+# ---- paper geometry (Sec. III.A), same as the original case ----
 RCELL = 0.00635              # 12.7 mm ID / 2
 CELL_LENGTH = 0.053          # 53 mm body length (tube/cell junction -> plate face)
 RB = 0.002                   # 4 mm inlet tube ID / 2
@@ -45,17 +39,17 @@ XLO = -TUBE_LENGTH            # -0.020
 XPLATE = CELL_LENGTH          # 0.053, plate cell-side face
 XEXIT = XPLATE + PLATE_THICK  # 0.0535, channel exit
 
-RTOP_GEOM = 55 * 1.3e-4        # 0.00715 m -- the .surf polygon's own closing radius (unchanged)
+RTOP_GEOM = 55 * 1.3e-4        # 0.00715 m, closing radius of the .surf polygon
 
 # ---- mesh: coarse outer base -> 2 bridging levels -> the original 3 fine levels ----
-# Fine levels (unchanged from the original case, validated against check_grid_2d.py):
+# fine levels, as in the original case (checked with check_grid_2d.py):
 DX4, DR4 = 2.0e-4, 1.3e-4            # (old "L1") 200 x 130 um
 DX5, DR5 = DX4 / 2.0, DR4 / 2.0       # (old "L2") 100 x 65 um
 DX6, DR6 = DX4 / 4.0, DR4 / 4.0       # (old "L3") 50 x 32.5 um
-# New bridging levels, each 2x the next-finer:
+# bridging levels, each 2x the next finer:
 DX3, DR3 = DX4 * 2.0, DR4 * 2.0       # 400 x 260 um
 DX2, DR2 = DX4 * 4.0, DR4 * 4.0       # 800 x 520 um
-# New coarse outer base (SPARTA level 1, implicit -- the whole domain):
+# coarse outer base (SPARTA level 1, the whole domain):
 DX1, DR1 = DX4 * 8.0, DR4 * 8.0       # 1600 x 1040 um
 
 NY = 63                        # RTOP_DOMAIN = 63 * DR1 ~= 6.55 cm (requested ~6.5 cm)
@@ -67,16 +61,16 @@ XHI = XLO + NX * DX1
 L2_XLO, L2_XHI, L2_YHI = -0.013, 0.147, 0.060
 # L3 band (level 3, 400x260um): narrower bridge
 L3_XLO, L3_XHI, L3_YHI = -0.009, 0.10, 0.03
-# L4 band (level 4, 200x130um = old "L1"): near cell + a stretch of near-aperture plume.
-# Its y-extent must be taller than L5/L6's (RTOP_GEOM) by >=4 L4-cells, or the
-# mesh jumps straight from L3 to L5/L6 at y=RTOP_GEOM, skipping L4 (4:1, gate fail).
+# L4 band (level 4, 200x130um = old "L1"): near cell + some near-aperture plume.
+# y-extent must exceed RTOP_GEOM by >= 4 L4 cells, else the mesh jumps L3 -> L5/L6
+# at y=RTOP_GEOM (4:1, fails the check).
 L4_XLO, L4_XHI, L4_YHI = -0.0045, 0.075, RTOP_GEOM + 0.001
 # L5 band (level 5, 100x65um = old "L2"): tube/cell junction through the whole cell body (unchanged)
 L5_XLO, L5_XHI, L5_YHI = -0.003, 0.057, RTOP_GEOM
 # L6 band (level 6, 50x32.5um = old "L3"): the plate/throat region (unchanged)
 L6_XLO, L6_XHI, L6_YHI = 0.051, 0.0555, RTOP_GEOM
 
-# ---- station / cap coordinates (unchanged -- depend only on XLO and the fine cell sizes) ----
+# ---- station / cap coordinates (depend only on XLO and the fine cell sizes) ----
 XC = XLO + 1.5 * DX4 / 16        # cap: just inside xlo, non-face at L4
 XTUBE = -0.0013 - 1.5 * DX5 / 16  # tube station, within the L5 band (nudged off-face)
 XAP = 0.05325 - 1.5 * DX6 / 16    # aperture station, within the L6 band (mid-plate, nudged off-face)

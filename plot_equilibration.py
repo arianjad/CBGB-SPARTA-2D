@@ -22,7 +22,7 @@ def parse_grid_dump(path):
             ncells = int(lines[i+1])
             i += 2
             assert lines[i].strip().startswith("ITEM: BOX BOUNDS")
-            i += 4  # skip 3 bound lines + move past
+            i += 4  # BOX BOUNDS header + 3 bound lines
             header = lines[i].strip()
             i += 1
             cols = header.replace("ITEM: CELLS", "").split()
@@ -49,7 +49,7 @@ def region_avg(arr, xlo, xhi, ylo, yhi, col):
         return np.nan
     vals = arr[mask, ci[col]]
     nrho = arr[mask, ci["f_ag[1]"]]
-    # density-weight the velocity/temp average (particles-weighted), simple mean for nrho itself
+    # u and T are density-weighted; nrho is a plain mean
     if col == "f_ag[1]":
         return vals.mean()
     w = nrho.copy()
@@ -91,7 +91,7 @@ def parse_surf_dump(path, field_name):
             total = 0.0
             for _ in range(nsurf):
                 parts = lines[i].split(); i += 1
-                total += float(parts[fidx - 2])  # header has "ITEM:" "CELLS/SURFS" prefix tokens stripped below
+                total += float(parts[fidx - 2])  # header starts with "ITEM:" "SURFS"
             steps.append(step); vals.append(total)
         else:
             i += 1
@@ -107,7 +107,7 @@ def parse_surf_dump_simple(path):
             step = int(lines[i+1]); i += 2
             i += 2  # NUMBER OF SURFS + value
             nsurf = int(lines[i-1])
-            i += 4  # BOX BOUNDS block (3 lines) - already consumed 1 via NUMBER OF SURFS block above; recompute below
+            i += 4  # BOX BOUNDS header + 3 lines
             i += 1  # header line "ITEM: SURFS id f_x"
             total = 0.0
             for _ in range(nsurf):

@@ -13,18 +13,15 @@
 #
 # Grid, per flow (tools/wsl/cyl3d_flow_params.sh sets REFINE and DT):
 #  1. 1.6 mm base cells; the chamber and an 8 mm x 8 mm-radius region
-#     outside each aperture start at a uniform 1.6/REFINE mm.
-#  2. Adaptation phase: run ADAPT_STEPS with nrho and T time-averaged, compute
-#     lambda, tau and Kn per cell (compute lambda/grid, Bird eq. 4.77 with the
-#     ne.vss parameters), and split (2x2x2) every cell with Kn < KNMIN, anywhere
-#     in the domain (cells below 1.2 KNMIN are split, for margin against
-#     sampling noise). Repeat until no cell violates the rule, at most NADAPT
-#     refining passes; quit with an error if cells still violate it, or if
-#     DT >= the smallest mean collision time in any cell.
-#  3. The grid is then fixed, the timestep counter reset to 0, and the
-#     production run is checkpointed like in.ne_fluor3d_sealed_run: a restart
-#     file every CHECKPOINT_STEPS (= DUMPFREQ, the averaging window), resume
-#     with in.ne_cyl3d_resume.
+#     outside each aperture start at 1.6/REFINE mm.
+#  2. Adaptation: run ADAPT_STEPS with nrho and T time-averaged, get lambda,
+#     tau, Kn per cell (compute lambda/grid, Bird eq. 4.77, ne.vss params),
+#     split 2x2x2 every cell with Kn < 1.2 KNMIN (margin for noise). Repeat,
+#     at most NADAPT passes; quit if cells still violate it or if
+#     DT >= the smallest mean collision time.
+#  3. Grid fixed, timestep reset to 0, production checkpointed like
+#     in.ne_fluor3d_sealed_run: restart every CHECKPOINT_STEPS (= DUMPFREQ,
+#     the averaging window), resume with in.ne_cyl3d_resume.
 # Pass MDOT (kg/s), FILLN (m^-3), FNUM, DT (s), REFINE, ADAPT_STEPS, NADAPT,
 # DUMPFREQ, CHECKPOINT_STEPS, MAXWIN and NDUMPWIN with -var (see the production
 # block: run to steady state, then NDUMPWIN averaging windows).
@@ -78,18 +75,17 @@ stats_modify flush yes
 timestep    ${DT}
 
 # ---- adaptation phase ----
-# per pass: nrho, T averaged over ADAPT_STEPS -> lambda, tau, Kn per cell; the
-# worst cell's position, density and temperature, and the number of cells that
-# break each half of the rule, are printed.
-# Cells cut by the wall to a gas-volume fraction < FMIN are skipped: their
-# density and temperature come from a particle or two in a sliver of volume
-# (the 20 SCCM smoke test showed n up to 30x the chamber and T 0-9 K in them,
-# all at r = 15.3 mm), and splitting them only makes new slivers. Their gas
-# is the same as in the neighbouring full cells, which are checked.
-# The sampled temperature is floored at TFLOOR (3 K) for lambda and tau: a
-# nearly empty cell (one particle, n ~ 1e19) samples T ~ 1e-17 K, which sends
-# the VHS lambda ~ (T/Tref)^(omega-1/2) to zero (seen in the 20 SCCM smoke
-# test). Real gas here stays well above 3 K; dense cells are unaffected.
+# per pass: nrho, T averaged over ADAPT_STEPS -> lambda, tau, Kn per cell;
+# prints the worst cell (position, n, T) and how many cells break each half
+# of the rule.
+# Wall-cut cells with gas-volume fraction < FMIN are skipped: n and T there
+# come from a particle or two in a sliver (20 SCCM smoke test: n up to 30x
+# chamber, T 0-9 K, all at r = 15.3 mm), and splitting them only makes new
+# slivers. The neighbouring full cells see the same gas and are checked.
+# T is floored at TFLOOR (3 K) for lambda and tau: a nearly empty cell (one
+# particle, n ~ 1e19) samples T ~ 1e-17 K and the VHS lambda ~
+# (T/Tref)^(omega-1/2) goes to zero (seen in the 20 SCCM smoke test). Real
+# gas here stays well above 3 K.
 compute     pg property/grid all xc yc zc vol xlo xhi ylo yhi zlo zhi
 variable    gfrac grid c_pg[4]/((c_pg[6]-c_pg[5])*(c_pg[8]-c_pg[7])*(c_pg[10]-c_pg[9]))
 variable    NAR equal ${ADAPT_STEPS}/10
@@ -179,16 +175,15 @@ fix         ag ave/grid all 10 ${NREP} ${DUMPFREQ} c_cg[*] c_tg[*]
 stats       5000
 stats_style step cpu np nattempt ncoll f_src[1] f_src[2] f_ab[1] f_ab[2] f_ab[3] f_ab[4] f_ab[5] f_ab[6]
 
-# Run to steady state, then average. After every window (DUMPFREQ steps =
-# CHECKPOINT_STEPS) the particle count is compared with its value two windows
-# earlier; the flow is steady once |dN|/N < TOL (default 0.005 per 20 ms, set
-# 2026-10-03; with gas residence times ~0.1 s that leaves the field within a few
-# % of its final state), after at least MINWIN windows. MAXWIN caps the windows left in this
-# job (the run stops with a NOT STEADY warning). Then NDUMPWIN windows also
-# dump the window-averaged field to field.grid and the run ends.
-# STEADYDONE = 1 (a resumed job that already reached steady state) goes straight
-# to the dump windows. The STEADY / NOT STEADY / PRODUCTION DONE lines also go to
-# steady.txt, which sbatch_cyl3d_neon.sh reads on a resume.
+# Run to steady state, then average. After each window (DUMPFREQ =
+# CHECKPOINT_STEPS steps) compare the particle count with two windows earlier;
+# steady once |dN|/N < TOL (0.005 per 20 ms since 2026-10-03; with residence
+# times ~0.1 s the field is then within a few % of final), after >= MINWIN
+# windows. MAXWIN caps the windows in this job (NOT STEADY warning). Then
+# NDUMPWIN windows dump the averaged field to field.grid.
+# STEADYDONE = 1 skips straight to the dump windows (resume after steady).
+# STEADY / NOT STEADY / PRODUCTION DONE also go to steady.txt, read by
+# sbatch_cyl3d_neon.sh on a resume.
 variable    TOL index 0.005
 variable    MINWIN index 5
 variable    STEADYDONE index 0

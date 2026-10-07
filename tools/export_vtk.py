@@ -1,27 +1,16 @@
 #!/usr/bin/env python3
 """Export one fluor-cell-3d field.grid frame + the wall mesh to compact VTK
-files, for interactive 3D viewing in PyVista on a local machine (this repo's
-own plot_field_3d_slices.py already does the HPC-side 2D slice plots; this
-is for a real rotatable 3D view instead, which needs a proper structured
-grid + a real desktop window, so it's meant to be viewed locally, not here).
+files for rotatable 3D viewing in PyVista on a local machine
+(plot_field_3d_slices.py does the 2D slices on the cluster).
 
 Writes two small XML VTK files (a few MB, not the 100+MB raw field.grid):
-  <out_prefix>_field.vtr  -- RectilinearGrid, point data: u,v,w,nrho,temp
-  <out_prefix>_walls.vtp  -- PolyData, the housing wall mesh
+  <out_prefix>_field.vtr  RectilinearGrid, point data: u,v,w,nrho,temp
+  <out_prefix>_walls.vtp  PolyData, the housing wall mesh
 
-No masking/filtering is applied here -- two attempts at an automatic
-"discard untrustworthy cells" filter (a fixed 5mm shell around the cavity
-boundary, then a flat simulated-particle-count threshold) were each tried
-and found to fail in opposite directions on this case's real settled field:
-the shell approach deleted real, physically continuous flow (a genuine
-recirculation gradient approaching the outlet from mid-cavity, confirmed
-smooth and well-sampled); the particle-count threshold deleted the
-legitimate exterior plume too, since it is real but inherently low-density
-far from the ports. Neither is a substitute for looking at nrho alongside
-velocity when interpreting the render -- exported here for exactly that,
-not filtered away. See docs/fluor-cell-3d-molecules-findings.md (or ask
-Claude in the HPC session that produced this run) for what's known so far
-about which regions are trustworthy.
+No masking. A 5mm shell around the cavity boundary cut real recirculation
+flow near the outlet, and a particle-count threshold cut the real (low-density)
+exterior plume, so look at nrho next to velocity instead.
+See docs/fluor-cell-3d-molecules-findings.md for which regions are trustworthy.
 
 Usage:
   python tools/export_vtk.py RUN_DIR --surf cell_fluor3d.surf --out-prefix OUT
@@ -47,17 +36,15 @@ def build_field_grid(xs, ys, zs, fields):
     z_edges = np.append(zs, zs[-1] + dz)
     grid = pv.RectilinearGrid(x_edges, y_edges, z_edges)
     for name in FIELD_POS:
-        # PyVista is Fortran-order/point-major; reshape_grid's arrays are
-        # (nx,ny,nz) C-order matching (x,y,z) axes directly, so a flat
-        # Fortran-order raveL is what VTK's implicit cell ordering expects.
+        # reshape_grid gives (nx,ny,nz); VTK's implicit cell order is x-fastest,
+        # i.e. a Fortran-order ravel
         grid.cell_data[name] = fields[name].ravel(order="F")
     return grid.cell_data_to_point_data()
 
 
 def build_wall_mesh(points, tris):
-    # points[0] is an unused dummy row (read_surf's point IDs are 1-based);
-    # left in as an isolated, unreferenced vertex rather than reindexing
-    # tris -- harmless in a PolyData, simpler than shifting every index.
+    # points[0] is a dummy (read_surf point IDs are 1-based); left in as an
+    # unreferenced vertex instead of reindexing tris
     faces = np.hstack([np.full((len(tris), 1), 3), tris]).ravel()
     return pv.PolyData(points, faces)
 

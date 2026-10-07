@@ -2,8 +2,8 @@
 # Unpack the ORCD migration package on subMIT and put everything in place.
 #   bash setup_on_submit.sh [TARGET]      (default TARGET=/work/submit/$USER/buffer_gas)
 # Run it from the package directory (where CBGB-SPARTA-2D.bundle is).
-# It is safe to re-run: existing pieces are left alone.
-#   - clones the repo INTO TARGET (TARGET becomes the repo root; start Claude there)
+# Safe to re-run: existing pieces are left alone.
+#   - clones the repo into TARGET (TARGET becomes the repo root)
 #   - unpacks results/figures, the Julia tarball, the post-processed data
 #   - makes ~/orcd/scratch -> /ceph/submit/data/user/<u>/$USER (all scripts use that path)
 #   - copies Claude's memory notes to ~/.claude/projects/<TARGET path with non-alphanumerics -> '-'>/memory

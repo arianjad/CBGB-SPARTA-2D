@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
-# Fig 3/4/5 reproduction: trace SrF molecules (M=106.618u, sigma=3e-18 m^2,
-# spawned thermalized at 4K with zero mean velocity) through 8 converged He
-# buffer-gas fields (SCCM 1,2,4,8,20,23,58,127), using 3 spawn distributions
-# per Takahashi et al.: gaussball (sigma=0.33cm), uniformball (1cm dia),
-# uniformcell (whole cell). Fig 3 = extraction fraction vs SCCM per
-# distribution; Fig 4 = pumpout-time histogram from the 20 SCCM gaussball
-# run; Fig 5 = position-binned heatmap from the 20 SCCM uniformcell run
-# (via --spawnout). XOBS=0.06m (just past the 0.0535m aperture exit).
+# Fig 3/4/5 (Takahashi et al.): trace SrF (M=106.618u, sigma=3e-18 m^2,
+# thermal at 4K, zero mean velocity) through 8 converged He fields
+# (SCCM 1,2,4,8,20,23,58,127) with 3 spawn distributions: gaussball
+# (sigma=0.33cm), uniformball (1cm dia), uniformcell (whole cell).
+# Fig 3: extraction fraction vs SCCM. Fig 4: pumpout-time histogram, 20 SCCM
+# gaussball. Fig 5: position-binned heatmap, 20 SCCM uniformcell (--spawnout).
+# XOBS=0.06m, just past the 0.0535m aperture exit.
 set -uo pipefail
 cd ~/CBGB-SPARTA-2D
 source .venv/bin/activate

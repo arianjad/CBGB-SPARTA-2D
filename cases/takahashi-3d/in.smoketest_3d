@@ -1,5 +1,5 @@
-# Minimal smoke test: does the revolved 3D surface read in cleanly
-# (watertight, correct normal orientation) before committing to a real run?
+# Smoke test: does the 3D surface read in cleanly (watertight, outward
+# normals)?
 seed        8675309
 units       si
 dimension   3

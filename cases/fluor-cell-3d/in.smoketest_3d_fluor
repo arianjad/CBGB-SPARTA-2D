@@ -1,7 +1,6 @@
-# Minimal smoke test: does cell_fluor3d.surf read in cleanly (watertight,
-# correct outward normals) before committing to a real run? Mirrors
-# cases/takahashi-3d/in.smoketest_3d. `run 0` only -- no physics tuning here.
-# 23K neon buffer gas (see ne.species/ne.vss).
+# Smoke test: does cell_fluor3d.surf read in cleanly (watertight, outward
+# normals)? `run 0` only. Same as cases/takahashi-3d/in.smoketest_3d.
+# 23K neon (ne.species/ne.vss).
 seed        8675309
 units       si
 dimension   3

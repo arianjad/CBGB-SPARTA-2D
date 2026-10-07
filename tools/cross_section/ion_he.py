@@ -16,7 +16,7 @@ Outputs (written to tracer/data/):
   bafplus_he_sigma_tracer.tsv  tracer-effective sigma_t(E_cm) at T = 4 K (see tracer_table.py)
 Checks printed: Langevin limit, thermal Omega11 and reduced mobility vs the polarization limit,
 nuclear stopping vs ZBL universal stopping at 0.25-5 keV lab.
-Light (a minute or two). Run from the repo root: python tools/cross_section/ion_he.py
+Takes a minute or two. Run from the repo root: python tools/cross_section/ion_he.py
 """
 import math
 import numpy as np

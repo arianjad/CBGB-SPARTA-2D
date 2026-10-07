@@ -2,8 +2,8 @@
 """Usage: python tools/fluor3d_asymmetry.py RUN_DIR/field.grid [NFRAMES]
 Asymmetry + leak check for a fluor-cell-3d run (flat or nested grid):
 volume-weighted, tail-averaged over the last 30% of field.grid frames, or
-over the last NFRAMES frames (only the file's tail is read -- use this for
-multi-GB dumps)."""
+over the last NFRAMES frames (reads only the file's tail; use for multi-GB
+dumps)."""
 import os, sys
 import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -13,7 +13,7 @@ if len(sys.argv) > 2:
     fr = list(read_tail_frames(sys.argv[1], int(sys.argv[2])))
 else:
     fr = read_complete_frames(sys.argv[1]).frames
-    # a resumed job re-dumps its starting step with an empty average; keep the first copy of each step
+    # resumed jobs re-dump their start step with an empty average; keep the first copy
     seen = set(); fr = [f for f in fr if not (f.timestep in seen or seen.add(f.timestep))]
     k = max(1, int(round(len(fr) * 0.3))); fr = fr[-k:]
 print("frames", [f.timestep for f in fr])
@@ -25,7 +25,7 @@ xc, yc, zc = A[:, 1]*1e3, A[:, 2]*1e3, A[:, 3]*1e3
 vol = np.prod(A[:, 7:10] - A[:, 4:7], axis=1) * 1e9   # mm^3
 n, u, v, w, T = A[:, 10], A[:, 11], A[:, 12], A[:, 13], A[:, 14]
 n = np.where(n < NRHO_CEILING, n, 0)
-N = n * vol                                          # (volume-weighted density)
+N = n * vol                                          # volume weight
 AY = AZ = 19.05; XEXIT = 82.55
 dy, dz = yc - AY, zc - AZ
 def avg(q, m): return (N*q)[m].sum() / N[m].sum()

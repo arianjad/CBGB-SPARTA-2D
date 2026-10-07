@@ -1,20 +1,17 @@
 #!/usr/bin/env python3
 """Seal the optical-window slot in the housing's top face of cell_fluor3d.surf.
 
-gen_fluor3d.py excludes the optical window (#4) and its frame (#1) to avoid
-a cut3d crash, on the assumption that the top face is continuous. It is
-not: the housing has a 30 x 7mm stadium slot (x 42-72mm, y 15-23mm) from
-the top face (z=38.1mm) down into the chamber (ceiling z~34.3mm), which the
-window normally covers. Left open, ~70% of the injected neon escaped
-through it (see docs/fluor-cell-3d-molecules-findings.md).
+gen_fluor3d.py drops the optical window (#4) and frame (#1) to avoid a cut3d
+crash, but the window covers a 30 x 7mm stadium slot (x 42-72mm, y 15-23mm)
+from the top face (z=38.1mm) down into the chamber (ceiling z~34.3mm). Left
+open, ~70% of the injected neon escaped through it
+(docs/fluor-cell-3d-molecules-findings.md).
 
-This removes the slot's side walls and caps the two openings they leave
-(the top-face rim at z=38.1 and the chamber-ceiling rim), i.e. treats the
-slot as solid -- the window-sealed cell minus a ~0.9 cm^3 pocket. Cap
-triangles are fanned from each rim's centroid and wound opposite to the
-neighbouring rim edge, so the result stays consistently oriented.
+Removes the slot's side walls and caps the two rims (top face z=38.1 and
+chamber ceiling), so the slot is solid: the window-sealed cell minus a
+~0.9 cm^3 pocket. Caps are fanned from each rim centroid, wound to match.
 
-gen_fluor3d.py needs cadquery (dev machine only); run this on its output:
+Usage (on gen_fluor3d.py output):
   python seal_top_slot.py [in.surf] [out.surf]
 (defaults: cell_fluor3d.surf -> cell_fluor3d_sealed.surf)
 """
@@ -79,9 +76,8 @@ def main():
     wall_tris = [tris[k] for k in slot]
     kept = [t for k, t in enumerate(tris) if k not in slot_set]
 
-    # The slot walls' own rim loops, traversed as the walls traverse them;
-    # the cap over each rim must traverse every rim edge the same way the
-    # walls did (it replaces them), so fan with the walls' direction.
+    # caps replace the walls, so each cap traverses the rim edges in the
+    # same direction the walls did
     loops = rim_loops(wall_tris)
     assert len(loops) == 2, f"expected top + bottom rim, got {len(loops)} loops"
     new_pts = [p for p in pts]

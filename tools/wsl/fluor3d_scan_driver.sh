@@ -1,11 +1,11 @@
 #!/bin/bash
 # Login-node driver for the fluor-cell-3d flow scan (5-30 SCCM extension).
-# As each flow's neon run completes (restart.base.<TOTAL> exists), submit its
+# When a flow's neon run is done (restart.base.<TOTAL> exists), submit its
 # field prep (sbatch_fluor3d_scan_post.sh, NPART=0), then its tracer jobs
-# (sbatch_fluor3d_tracer_chunk.sh on mit_preemptable, 40 threads, 1 h), and
-# replot once everything is finished (PREP_ONLY=1: field prep only). Idempotent via marker files in each
-# post/ dir (.prep_submitted, .tracer_submitted: the job ids), so it can be
-# killed and restarted at any point. Polls every 5 min; only runs squeue/ls.
+# (sbatch_fluor3d_tracer_chunk.sh on mit_preemptable, 40 threads, 1 h), then
+# replot at the end. PREP_ONLY=1: field prep only. Marker files in each post/
+# dir (.prep_submitted, .tracer_submitted, holding job ids) make it safe to
+# kill and restart. Polls every 5 min, only runs squeue/ls.
 #   nohup bash tools/wsl/fluor3d_scan_driver.sh > fluor3d_scan_driver.log 2>&1 &
 cd "$HOME/CBGB-SPARTA-2D" || exit 1
 B="$HOME/orcd/scratch/cbgb-sparta-3d/fluor-scan"
@@ -17,9 +17,8 @@ nedep() { local f=$1; if [ "$f" -le 5 ]; then echo 10000; elif [ "$f" -le 10 ]; 
           elif [ "$f" -le 15 ]; then echo 3000; elif [ "$f" -le 20 ]; then echo 2000;
           elif [ "$f" -le 25 ]; then echo 1500; else echo 1000; fi; }
 TR=tools/wsl/sbatch_fluor3d_tracer_chunk.sh
-# node17xx/node18xx crash inside LLVM while Julia precompiles CSV.jl there
-# (a CPU-type problem, not a race, so retrying doesn't help)
-# (a node range in --exclude must name only existing nodes, so list them)
+# node17xx/node18xx crash in LLVM when Julia precompiles CSV.jl (CPU type, not
+# a race, retrying doesn't help). --exclude ranges must name existing nodes only.
 BADNODES=$(sinfo -p mit_preemptable -h -N -o %N | grep -E "^node1[78][0-9][0-9]$" | sort -u | paste -sd,)
 TOPT="-p mit_preemptable -t 01:00:00 --cpus-per-task=40 --mem=96G${BADNODES:+ --exclude=$BADNODES}"
 while true; do

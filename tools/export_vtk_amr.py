@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 """Export a tail-averaged 3D SPARTA grid dump on a NESTED (multi-level)
-grid -- e.g. cases/takahashi-3d(-offset)'s `create_grid ... levels 2` --
-to a uniform VTK ImageData (.vti) for isosurfacing in PyVista.
+grid (e.g. cases/takahashi-3d(-offset), `create_grid ... levels 2`) to a
+uniform VTK ImageData (.vti) for isosurfacing in PyVista.
 
-tools/export_vtk.py only handles a flat single-level grid (it reshapes by
-unique lo-bounds). Here each cell is built as a voxel from its own
-xlo..zhi bounds, cell data attached, and the result probe-resampled onto a
-uniform grid over a cropped window -- a probe returns the value of the
-cell containing each sample point, which is correct regardless of level.
+tools/export_vtk.py only handles a flat single-level grid. Here each cell is
+a voxel from its own xlo..zhi bounds, and the result is probe-resampled onto
+a uniform grid over a cropped window (a probe returns the containing cell's
+value, so levels don't matter).
 
 Frames in the averaging window are matched by cell id (rows are sorted by
 id per frame), since dump row order can change with load balancing.

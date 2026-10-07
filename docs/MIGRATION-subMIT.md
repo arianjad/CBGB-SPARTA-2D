@@ -127,16 +127,3 @@ The raw neon `field.grid` dumps (coarse flow scan ~160 GB, uniform 0.20 mm run
 ~180 GB) and the Takahashi validation run, in
 `~/orcd/scratch/cbgb-sparta-3d/`. They are only needed to re-freeze over a
 different time window or to make field plots. ORCD scratch is not backed up.
-</content>
-</invoke>
-<invoke name="Bash">
-<parameter name="command">[ -f ~/.ssh/id_ed25519_submit ] || ssh-keygen -q -t ed25519 -N "" -C "heeric@orcd-for-submit" -f ~/.ssh/id_ed25519_submit; cat ~/.ssh/id_ed25519_submit.pub; cd ~/CBGB-SPARTA-2D && git add docs/MIGRATION-subMIT.md docs/HANDOFF-subMIT.md tools/migrate/ && git commit -q -m "Migration: setup_on_submit.sh, target /work/submit/heeric/buffer_gas
-
-setup_on_submit.sh clones the bundle into the target folder (the repo root
-where Claude starts), unpacks figures/Julia/data, links ~/orcd/scratch to
-/ceph, and copies the memory notes to the matching
-~/.claude/projects/<path-key>/memory. README/handoff updated for that
-layout, with pull (from subMIT) and push (from ORCD) copy options and the
-full first message for the new session.
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git log --oneline -1 | cat && bash tools/migrate/make_migration_package.sh 2>&1 | grep -E "setup_on|README|ready"

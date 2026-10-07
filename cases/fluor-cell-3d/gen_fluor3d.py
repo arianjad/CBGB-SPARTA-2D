@@ -1,32 +1,21 @@
 """
 Build the final SPARTA 3D triangulated surf file from the CAD geometry.
 
-Pipeline:
-  1. Re-run the screw-hole plugging (same logic as defeature.py).
-  2. ALSO seal the outer 0.5mm tip of the 1.588mm buffer-gas-inlet hole
-     (in solid #6) with a plug, using the same proven plug/fuse machinery.
-     This converts it from an open through-hole into a capped blind stub,
-     matching the emit/surf-on-sealed-wall convention used by both existing
-     cases in the repo (cases/b5-lean, cases/takahashi-3d).
-  3. Triangulate all 7 (now-plugged) solids directly -- no CAD boolean
-     merge needed: a solid with through-holes is already a valid closed
-     manifold (verified watertight via check_watertight.py), so the union
-     of all 7 parts' own closed meshes is exactly the surface SPARTA needs.
-  4. Filter degenerate (near-zero-area) triangles left over from tessellating
-     the tiny conical drill-tip voids at blind screw holes.
-  5. Classify each triangle's type by the diameter of the CAD face it came
-     from:
-       type 1 = generic wall (everything else, 4K diffuse-reflecting)
-       type 2 = buffer gas inlet cap (the new sealing plug's flat face)
-       type 3 = molecule inlet channel wall (2.54mm, open to exterior)
-       type 4 = molecule outlet channel wall (3.175mm, open to exterior)
-  6. Convert mm -> m (SPARTA units si) and write Points/Triangles sections
-     in the exact format used by cases/takahashi-3d/cell_takahashi_3d.surf.
+Steps:
+  1. Plug the screw holes (same logic as defeature.py).
+  2. Plug the outer 0.5 mm of the 1.588 mm buffer-gas inlet hole (solid #6),
+     so it is a capped blind stub with emit/surf on the cap, as in
+     cases/b5-lean and cases/takahashi-3d.
+  3. Fuse the plugged solids into one body and triangulate it.
+  4. Drop degenerate triangles (after vertex dedup).
+  5. Type each triangle from its CAD face:
+       1 = wall (4 K diffuse), 2 = buffer gas inlet cap (plug's flat face),
+       3 = molecule inlet channel (2.54 mm), 4 = molecule outlet channel (3.175 mm)
+  6. mm -> m, write in the format of cases/takahashi-3d/cell_takahashi_3d.surf.
 
-Requires cadquery (OCCT bindings) -- a dev-machine dependency, not needed
-on the HPC side. Run this to REGENERATE cell_fluor3d.surf from the source
-STEP file; SPARTA itself only ever reads the plain-text .surf output.
-Run from this directory: python gen_fluor3d.py
+Needs cadquery (OCCT), so run it on a dev machine; SPARTA only reads the
+.surf output.
+Usage (from this directory): python gen_fluor3d.py
 """
 import os
 import sys
@@ -53,24 +42,14 @@ DIAM_TOL_MM = 0.02
 FUSE_TOL = 1e-3
 MM_TO_M = 1e-3
 
-# Optical window (#4) and its retaining frame (#1): confirmed by direct CAD
-# inspection that the housing's top face (z=38.1) is ONE continuous planar
-# face spanning the full housing footprint, with no pocket under the
-# window -- so these two parts have no connection to the gas chamber at
-# all (the chamber only bores along X and Y, never reaching z=38.1). They
-# are a purely surface-mounted optical/mechanical detail, irrelevant to
-# the DSMC gas domain. Their mounting geometry (window sitting ~0.13mm
-# above the housing, its top overlapping ~0.38mm into the frame) packs
-# multiple thin, closely-stacked surfaces into a sub-mm vertical span --
-# smaller than any reasonable grid cell -- which is what was crashing
-# SPARTA's cut3d cell-cutter (CH: Edge not part of 2 vertices) even after
-# the mesh passed the global watertight check. Excluding them removes that
-# crash with zero effect on the actual gas-flow boundary.
-# CORRECTION: the top face is NOT continuous -- the housing has a 30 x 7mm
-# window slot (x 42-72mm, y 15-23mm) running from z=38.1 down into the
-# chamber, which the excluded window seals. Excluding it left that slot
-# open and ~70% of the neon escaped through it. Run seal_top_slot.py on
-# this script's output (-> cell_fluor3d_sealed.surf) before using it.
+# Optical window (#4) and retaining frame (#1) are excluded. Their mounting
+# geometry (window ~0.13 mm above the housing, overlapping ~0.38 mm into the
+# frame) stacks thin surfaces in a sub-mm span and crashes SPARTA's cut3d
+# cutter (CH: Edge not part of 2 vertices).
+# But the window seals a 30 x 7 mm slot in the housing top (x 42-72 mm,
+# y 15-23 mm, from z = 38.1 down into the chamber). With it excluded ~70% of
+# the neon escaped through the slot, so run seal_top_slot.py on this output
+# (-> cell_fluor3d_sealed.surf) before using it.
 EXCLUDED_SOLID_IDXS = {1, 4}
 
 # Buffer gas inlet cap (solid #6, 1.588mm hole, true opening at (34.290,25.400,0.000))
@@ -127,18 +106,10 @@ def axis_key(start, end):
     return (idx, sign, perp)
 
 def group_screw_holes(faces):
-    """Build one plug per physical hole, sized exactly to each face group's
-    own cylindrical extent (no attempt to reach any adjacent drill-tip
-    cone). This intentionally leaves a small enclosed void at each blind
-    hole's conical tip -- see keep_largest_shell() below for how those are
-    removed afterward. (Two earlier approaches tried to eliminate the voids
-    at the boolean stage instead -- extending each plug to the cone's exact
-    apex, or by a flat margin -- but both introduced new, worse artifacts:
-    a flat margin risked reaching into unrelated void space like the main
-    chamber bore, and even the precise apex-based extension left duplicate/
-    non-manifold geometry at the hole's OPENING end as a non-local side
-    effect of the more complex simultaneous 32-hole boolean fuse. Stripping
-    the resulting shells after a plain fuse is far more robust.)"""
+    """One plug per hole, sized to the group's cylindrical extent only.
+    Leaves a small enclosed void at each blind hole's drill-tip cone, which
+    keep_largest_shell() removes. Extending plugs to the cone apex or by a
+    margin gave non-manifold geometry at the hole openings instead."""
     groups = {}
     for radius, start, end in faces:
         key = axis_key(start, end)
@@ -161,16 +132,10 @@ def group_screw_holes(faces):
     return plugs
 
 def keep_largest_shell(shape):
-    """Discard every shell but the largest (by face count), rebuilt as a
-    fresh solid. A plain (unextended) plug fuse leaves each blind screw
-    hole's drill-tip cone as its own small, fully enclosed 2-face void
-    shell alongside the one real outer shell -- these are individually
-    valid B-Rep (BRepCheck-clean) and invisible to a ray-casting classifier,
-    but SPARTA's own read_surf watertight check rejects a surf file over
-    them regardless ("duplicate edges", one per such void). Since they are
-    genuinely enclosed and touch nothing else, just dropping them from the
-    solid removes the corresponding tiny closed patch of triangles from the
-    final mesh with no effect on the real boundary."""
+    """Keep only the largest shell (by face count) as a new solid.
+    The drill-tip voids left by the plug fuse are small enclosed 2-face
+    shells; BRepCheck accepts them but SPARTA read_surf rejects them
+    ("duplicate edges", one per void). They touch nothing, so drop them."""
     shells = []
     e = TopExp_Explorer(shape, TopAbs_SHELL)
     while e.More():
@@ -195,12 +160,8 @@ def keep_largest_shell(shape):
     return new_solid
 
 def keep_shells_min_faces(shape, min_faces):
-    """Like keep_largest_shell, but keeps every shell with at least
-    min_faces faces (not just the single largest) -- used after the final
-    7-part fuse, where more than one surviving shell can be legitimate
-    (e.g. the optical window and its retaining frame, which don't share
-    coincident geometry with the main body and so correctly remain their
-    own separate shells rather than merging into it)."""
+    """Keep every shell with >= min_faces faces. Used after the final
+    multi-part fuse, where more than one shell can be legitimate."""
     shells = []
     e = TopExp_Explorer(shape, TopAbs_SHELL)
     while e.More():
@@ -292,11 +253,9 @@ CAP_EXPECT_CENTER_MM = (
 CAP_EXPECT_AREA_MM2 = 3.14159265 * GAS_INLET_RADIUS_MM ** 2
 
 def classify_face(face):
-    """Return 2 (gas inlet cap), 3 (molecule inlet), 4 (molecule outlet), or
-    1 (generic wall). The cap is identified as a PLANAR, ~circular, small
-    face at the plug's known end location -- NOT by cylinder diameter, since
-    the cap's cylindrical side wall shares the channel's own 1.588mm
-    diameter and would otherwise wrongly tag the whole channel as type 2."""
+    """Return 2 (gas inlet cap), 3 (molecule inlet), 4 (molecule outlet) or
+    1 (wall). The cap is found as a small planar face at the plug's end, not
+    by diameter: the plug's side wall has the channel's 1.588 mm diameter."""
     surf = BRepAdaptor_Surface(face, True)
     if surf.GetType() == GeomAbs_Cylinder:
         diameter = surf.Cylinder().Radius() * 2.0
@@ -311,21 +270,14 @@ def classify_face(face):
         area = props.Mass()
         com = props.CentreOfMass()
         if abs(area - CAP_EXPECT_AREA_MM2) <= 0.5:
-            # Tolerance must be well under GAS_INLET_CAP_DEPTH_MM (0.5mm) --
-            # the plug has TWO flat end faces exactly that far apart (the
-            # true-exterior face at GAS_INLET_CENTER_MM, which must stay
-            # type 1, and the intended cap at CAP_EXPECT_CENTER_MM). A loose
-            # tolerance here previously matched both, silently tagging half
-            # the emit/surf source's area on the wrong (outward-facing) end.
+            # tolerance must be well under GAS_INLET_CAP_DEPTH_MM (0.5 mm): the
+            # plug's two end faces are that far apart, and the outer one
+            # (at GAS_INLET_CENTER_MM) must stay type 1.
             d = ((com.X()-CAP_EXPECT_CENTER_MM[0])**2 + (com.Y()-CAP_EXPECT_CENTER_MM[1])**2 +
                  (com.Z()-CAP_EXPECT_CENTER_MM[2])**2) ** 0.5
-            # Sanity check: this face should be perpendicular to the channel
-            # axis (a disk capping it), not e.g. some unrelated planar face
-            # that happens to have a similar area by coincidence. Not used
-            # for sign/direction -- Geom_Plane's canonical axis direction
-            # isn't guaranteed to match face.Orientation()'s sense, so the
-            # tight distance check above is what actually disambiguates the
-            # two candidate end faces.
+            # also require the face to be perpendicular to the channel axis.
+            # Only |dot| is used: Geom_Plane's axis sign need not match
+            # face.Orientation(), so the distance check picks the end.
             pln = surf.Plane()
             n = pln.Axis().Direction()
             normal_dot = n.X()*GAS_INLET_DIR[0] + n.Y()*GAS_INLET_DIR[1] + n.Z()*GAS_INLET_DIR[2]
@@ -365,13 +317,9 @@ def main():
         hole_plugs = group_screw_holes(screw_faces)
         plugs = [make_plug(r, s, d, h) for r, s, d, h in hole_plugs]
 
-        # clean() (ShapeUpgrade_UnifySameDomain) is needed on solid #0 to
-        # avoid shell fragmentation from its 32 simultaneous plugs, but on
-        # solid #6 it corrupts an unrelated face where the 1.588mm channel
-        # meets the 20.32mm bore (confirmed: clean() alone, with no fuse at
-        # all, already breaks that face -- an OCCT limitation on this
-        # shallow-angle intersection, not something plugging causes). So
-        # skip clean() specifically for solid #6.
+        # clean() (UnifySameDomain) is needed on solid #0 (32 plugs fragment
+        # the shell), but on solid #6 it breaks the face where the 1.588 mm
+        # channel meets the 20.32 mm bore, even with no fuse. Skip it there.
         do_clean = si != GAS_INLET_SOLID_IDX
         new_shape = fuse_shapes(shape, plugs, do_clean=do_clean)
         new_shape = keep_largest_shell(new_shape)
@@ -387,26 +335,10 @@ def main():
 
         plugged_solids.append(new_shape)
 
-    # Fuse into ONE true watertight body instead of triangulating each of
-    # the 7 CAD parts independently and concatenating. The independent-
-    # triangulation approach (used until now) is watertight by our own
-    # per-solid free-edge check, since each part is internally consistent
-    # -- but at every mating boundary between touching parts (housing to
-    # each bolted-on plate/cover/inlet block) it leaves TWO separate,
-    # oppositely-facing surface patches covering the same physical area: a
-    # real double-wall duplicate, invisible to a check that only looks
-    # within one solid at a time. That is almost certainly what SPARTA's
-    # own read_surf watertight check has been rejecting all along -- the
-    # "32 duplicate edges" count stayed IDENTICAL even after the screw-hole
-    # void fix above changed solid #0's triangle count by 8x, which rules
-    # out the screw holes as the real cause and points at the (until now
-    # untouched) mating boundaries instead.
-    #
-    # Not every part actually touches: the optical window and its
-    # retaining frame sit with a genuine small CAD gap/overlap versus the
-    # main housing (not flush-mating), so they legitimately remain their
-    # own separate shells after the fuse -- that's correct, not a defect,
-    # since they don't actually share coincident geometry with anything.
+    # Fuse all parts into one body. Triangulating each part separately leaves
+    # two opposite-facing patches at every mating face (housing to each
+    # plate/cover/inlet block), which SPARTA read_surf rejects as duplicate
+    # edges. Parts that don't touch flush stay separate shells.
     base = plugged_solids[0]
     tool = make_compound(plugged_solids[1:])
     fuse = BRepAlgoAPI_Fuse(base, tool)
@@ -420,12 +352,9 @@ def main():
     all_tris = triangulate_solid(merged)
     print(f"Total triangles before filtering: {len(all_tris)}")
 
-    # Classify. Do NOT drop small-area triangles here -- some (e.g. at the
-    # tiny conical drill-tip bottoms of blind screw holes) are topologically
-    # load-bearing: removing them opens real gaps in the mesh rather than
-    # closing harmless artifacts. Truly-degenerate (zero-area) triangles are
-    # instead dropped later, after vertex dedup, by their repeated point
-    # index -- that's the safe point to filter since it can't orphan edges.
+    # Don't drop small-area triangles here: some (drill-tip bottoms) are
+    # needed to keep the mesh closed. Degenerate ones are dropped after
+    # vertex dedup by repeated point index, which can't orphan edges.
     kept = []
     type_counts = {1: 0, 2: 0, 3: 0, 4: 0}
     for p1, p2, p3, face in all_tris:

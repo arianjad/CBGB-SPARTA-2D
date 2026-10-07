@@ -1,11 +1,7 @@
-# Checkpointed production run of the fluor-cell-3d case, mirroring
-# cases/takahashi-3d/in.he_takahashi_3d_run's chunked restart pattern.
-# Same geometry/species/setup as in.ne_fluor3d_scoping.
-#
-# Checkpointed: writes a full SPARTA restart file every CHECKPOINT_STEPS (in
-# addition to the running field.grid dump), so a job killed early (walltime
-# limit, node failure) does not lose all progress -- resume with
-# in.ne_fluor3d_resume from the latest restart.<step> file.
+# Checkpointed production run of fluor-cell-3d (chunked restarts as in
+# cases/takahashi-3d/in.he_takahashi_3d_run). Setup as in.ne_fluor3d_scoping.
+# Writes a restart file every CHECKPOINT_STEPS besides the field.grid dump;
+# resume with in.ne_fluor3d_resume from the latest restart.<step>.
 # Pass MDOT (kg/s), FILLN (m^-3), FNUM, DT (s), DUMPFREQ,
 # CHECKPOINT_STEPS, and NCHUNKS with -var.
 

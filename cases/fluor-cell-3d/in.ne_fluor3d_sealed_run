@@ -1,21 +1,14 @@
-# Sealed-window production run: same as in.ne_fluor3d_run but on
-# cell_fluor3d_sealed.surf (seal_top_slot.py -- the open optical-window slot
-# had been leaking ~70% of the gas) with the chamber refined 8x8x8.
-# Sealed, the chamber fills to ~5e21 m^-3 (the handoff's aperture-law
-# FILLN), where the 23K Ne mean free path is ~0.4mm; the flat 3.25-3.33mm
-# grid would be ~9 mean free paths per cell, so region CAV (the chamber and
-# both port channels) is refined to ~0.41mm cells. Exterior stays coarse
-# (lambda there is >10mm). Averaging window is 10 x DUMPFREQ/10 = DUMPFREQ steps,
-# so pass CHECKPOINT_STEPS = DUMPFREQ (restarts must land on window edges).
-#
-# Checkpointed production run of the fluor-cell-3d case, mirroring
-# cases/takahashi-3d/in.he_takahashi_3d_run's chunked restart pattern.
-# Same geometry/species/setup as in.ne_fluor3d_scoping.
-#
-# Checkpointed: writes a full SPARTA restart file every CHECKPOINT_STEPS (in
-# addition to the running field.grid dump), so a job killed early (walltime
-# limit, node failure) does not lose all progress -- resume with
-# in.ne_fluor3d_resume from the latest restart.<step> file.
+# Sealed-window production run: in.ne_fluor3d_run on cell_fluor3d_sealed.surf
+# (seal_top_slot.py; the open window slot leaked ~70% of the gas), chamber
+# refined 8x8x8.
+# Sealed chamber fills to ~5e21 m^-3 (aperture-law FILLN), where the 23K Ne
+# mean free path is ~0.4mm; the flat 3.25-3.33mm grid would be ~9 lambda per
+# cell, so region CAV (chamber + both port channels) is refined to ~0.41mm.
+# Exterior stays coarse (lambda > 10mm). Averaging window is
+# 10 x DUMPFREQ/10 = DUMPFREQ steps, so pass CHECKPOINT_STEPS = DUMPFREQ
+# (restarts must land on window edges).
+# Writes a restart file every CHECKPOINT_STEPS besides the field.grid dump;
+# resume with in.ne_fluor3d_resume from the latest restart.<step>.
 # Pass MDOT (kg/s), FILLN (m^-3), FNUM, DT (s), DUMPFREQ,
 # CHECKPOINT_STEPS, and NCHUNKS with -var.
 

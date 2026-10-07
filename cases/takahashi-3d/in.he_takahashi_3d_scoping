@@ -1,9 +1,7 @@
-# 3D scoping test: revolved Takahashi single-stage cell (on-axis, same
-# geometry as the validated 2D-axisymmetric case), true 3D DSMC, NO
-# axisymmetric weighting trick. Purpose: measure real throughput
-# (steps/sec) to extrapolate a full run's wall-clock cost, before
-# committing to production-resolution meshing. Simplified vs. the 2D
-# deck: only 2 mesh levels (not 6), no flux-station diagnostics.
+# 3D scoping test: revolved on-axis Takahashi cell (same geometry as the
+# validated 2D-axisymmetric case), no axisymmetric weighting. Measures
+# steps/sec to estimate a full run's wall-clock cost. Simpler than the 2D
+# deck: 2 mesh levels (not 6), no flux stations.
 variable    SEED index 8675309
 seed        ${SEED}
 units       si

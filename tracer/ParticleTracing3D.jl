@@ -1,35 +1,21 @@
-# True-3D frozen-field particle tracer, for cases/fluor-cell-3d (a real,
-# non-axisymmetric geometry -- an off-axis buffer gas inlet -- so the 2D
-# axisymmetric ParticleTracing.jl cannot be used as-is).
+# 3D frozen-field particle tracer for cases/fluor-cell-3d (off-axis inlet, not
+# axisymmetric, so the 2D ParticleTracing.jl can't be used).
 #
-# This is NOT a rewrite of the physics. It reuses ParticleTracing.jl's
-# collision kinematics, free-path sampling, and trajectory/statistics
-# machinery UNCHANGED (collide!, exact_partner, freePath, propagate,
-# SimulateParticles are all already geometry-agnostic -- they just call
-# whatever interpolate!/getCollision closures build_field() hands them).
-# Only three things are genuinely different for a real 3D case, and this
-# file replaces exactly those:
-#   1. Geometry: reads cell_fluor3d.surf's 3D "Points"/"Triangles" format
-#      (not 2D "Points"/"Lines"), and getCollision() does a real 3D
-#      segment-vs-triangle-mesh test (Moller-Trumbore) instead of 2D line
-#      intersection.
-#   2. Field: reads a genuine 3D SPARTA grid dump (cell centres in x,y,z
-#      with their own u,v,w,nrho,temp -- not a 2D r-z field with an
-#      assumed azimuthal rotation, which is only valid for an axisymmetric
-#      geometry and this one is not).
-#   3. Spawn position/CLI args are x,y,z directly, not r,z,phi.
+# Collision kinematics, free-path sampling and the trajectory/statistics code
+# are the same as ParticleTracing.jl (they only call the interpolate!/
+# getCollision closures from build_field()). What differs:
+#   1. geometry: 3D Points/Triangles surf file, segment-vs-triangle test
+#      (Moller-Trumbore) instead of 2D line intersection
+#   2. field: 3D SPARTA grid dump (x,y,z cell centres with u,v,w,nrho,temp),
+#      no azimuthal rotation
+#   3. spawn position / CLI args are x,y,z, not r,z,phi
 #
-# See ../docs/hpc-fluor-cell-3d-molecules-handoff.md for how to run this
-# and what parameters to use for the BaF+ case. Smoke-tested locally
-# against a synthetic cube geometry + synthetic field (single- and
-# multi-threaded, both a slow near-thermal case and a fast 500eV-speed
-# case) -- NOT against the real cell_fluor3d.surf/field.grid, which
-# weren't available on the machine that wrote this. Treat the first real
-# run as the actual first end-to-end test, and see the handoff doc's
-# validation checklist before trusting results from it.
+# How to run and BaF+ parameters: ../docs/hpc-fluor-cell-3d-molecules-handoff.md.
+# Originally smoke-tested only on a synthetic cube geometry and field; see the
+# handoff doc's validation checklist.
 #
-# Derived from ParticleTracing.jl (see that file's own header for its
-# further upstream provenance). GNU GPL version 3; see ../licenses/GPL-3.0.txt.
+# Derived from ParticleTracing.jl (see that file's header for upstream
+# provenance). GNU GPL version 3; see ../licenses/GPL-3.0.txt.
 
 using Distributed
 using Random
@@ -81,15 +67,8 @@ end
     return StatsArray(stats, minr, maxr, rbins, minz, maxz, zbins, rbins/(maxr-minr), zbins/(maxz-minz))
 end
 
-# NOTE: this bins on (radial-ish, axial) exactly like the 2D file, using x
-# as the "axial" coordinate and sqrt(y^2+z^2) as the "radial" coordinate,
-# purely as a 2D SUMMARY projection for diagnostics (StatsArray was never
-# the particle's actual physics, just a binned reporting aid). For a
-# genuinely off-axis geometry this projection is a simplification -- it's
-# fine for a quick x-position vs. "distance off the x-axis" profile, but
-# don't read y/z asymmetry out of it. If per-region 3D binning is needed
-# later, that's a real change to make here, not implied by anything in
-# this file today.
+# Bins on (r, x) like the 2D file, with x as axial and sqrt(y^2+z^2) as radial.
+# Only a 2D summary projection for diagnostics; don't read y/z asymmetry out of it.
 @inline function updateStats!(s::StatsArray, x, v, t, ncolls, lfree)
     r = sqrt(x[2]^2+x[3]^2)
     ridx = min(s.rbins, 1+floor(Int, s.rstep*(r-s.minr)))
@@ -406,13 +385,11 @@ function generate_lookup_table(Tmin, Tstep, Tmax, Umin, Ustep, Umax, nsamples=10
     return table
 end
 
-# ---- Collision kinematics and free-path sampling: identical to
-# ParticleTracing.jl. This is a general elastic two-body collision (exact
-# for ANY mass ratio and ANY relative velocity, not a near-thermal
-# approximation), and an exact flux-weighted rejection sampler for the
-# collision partner's velocity -- both already correct for a fast (500 eV)
-# particle slowing through a thermal gas. See docs/hpc-fluor-cell-3d-
-# molecules-handoff.md for why this does NOT need new physics here. ----
+# ---- Collision kinematics and free-path sampling, same as ParticleTracing.jl.
+# General elastic two-body collision (any mass ratio and relative velocity) and
+# an exact flux-weighted rejection sampler for the partner velocity, so it is
+# fine for a fast (500 eV) ion slowing in thermal gas
+# (docs/hpc-fluor-cell-3d-molecules-handoff.md). ----
 
 @inline function exact_partner(w0, T)
     s = sqrt(kB*T/MASS_BUFFER_GAS)
@@ -461,42 +438,25 @@ end
 """
     sigma_of_speed(vcoll, T)
 
-LEGACY model (--sigma-model edep), superseded by the default --sigma-model table;
-kept for comparison with earlier runs. Its 1.5e-19 floor overestimates the cross
-section 2-3x above ~200 eV lab (see docs/hpc-fluor-cell-3d-molecules-handoff.md).
+Legacy model (--sigma-model edep), replaced by the default --sigma-model table;
+kept to compare with earlier runs. Its 1.5e-19 floor overestimates the cross
+section 2-3x above ~200 eV lab (docs/hpc-fluor-cell-3d-molecules-handoff.md).
 
-Energy-dependent cross section: SIGMA_LOW at/below the local buffer-gas
-thermal speed (sqrt(8kT/(pi*m_gas)), the same quantity already used
-below for the mean relative speed -- this is exactly the regime the
-literature-anchored SIGMA_LOW value is valid for), falling off as
-1/vcoll above that (Langevin capture theory: for a polarization-
-dominated ion-neutral potential, the capture cross section scales
-exactly as 1/v, which is why the classic Langevin RATE CONSTANT,
-sigma*v, is velocity-independent), floored at SIGMA_HIGH_FLOOR for high
-collision speed (repulsive-core regime, e.g. early in a 500eV ion's
-trajectory, where a near-thermal measurement's cross section value is
-no longer applicable).
+SIGMA_LOW at or below the local gas thermal speed sqrt(8kT/(pi m_gas)), then
+1/vcoll above it (Langevin capture: sigma ~ 1/v, constant rate sigma*v), floored
+at SIGMA_HIGH_FLOOR at high collision speed (repulsive core, early in a 500 eV
+ion's path).
 
-SIGMA_LOW=2.0e-18 m^2 is scaled from a REAL DIRECT MEASUREMENT: buffer-
-gas-cooled BaF + He collision cross sections of 1.4e-18 and 2.7e-18 m^2
-(two independent papers, Phys. Rev. A 95, 032701 (2017) and arXiv
-1906.08798), scaled He->Ne by polarizability. Two caveats on that
-number: it's for neutral BaF, not the BaF+ ion this tracer actually
-simulates (ion-induced-dipole attraction should make the true ionic
-cross section equal or larger, so this is more a lower bound than a
-central estimate), and it's still a near-thermal value being used as
-the LOW-speed anchor only, not applicable on its own across the whole
-500eV-to-thermal range. SIGMA_HIGH_FLOOR=1.5e-19 m^2 remains a physical-
-reasoning estimate (ionic radius sum) with no direct high-energy
-literature backing found for this or a closely analogous system -- one
-loose plausibility signal from general ion-atom scattering literature
-(not confirmed specific to this system) suggests real cross sections may
-fall off more gradually with energy than the 1/v form here assumes,
-which would mean the true high-energy cross section is reached more
-gradually and stays higher across more of the trajectory than this
-model predicts. See docs/hpc-fluor-cell-3d-molecules-handoff.md for the
-full reasoning and sourcing, and for running the old constant-sigma
-bracket alongside this for comparison.
+SIGMA_LOW = 2.0e-18 m^2: measured BaF + He cross sections 1.4e-18 and 2.7e-18 m^2
+(Phys. Rev. A 95, 032701 (2017); arXiv 1906.08798), scaled He->Ne by
+polarizability. That is neutral BaF, and the ion-induced dipole should make the
+BaF+ value equal or larger, so treat it as a lower bound; it is also a
+near-thermal value, used only as the low-speed anchor.
+SIGMA_HIGH_FLOOR = 1.5e-19 m^2 is an estimate from the ionic radius sum, with no
+direct high-energy data found. General ion-atom scattering suggests a slower
+fall-off than 1/v, i.e. the real cross section may stay higher over more of the
+trajectory. Sourcing and the constant-sigma bracket:
+docs/hpc-fluor-cell-3d-molecules-handoff.md.
 """
 @inline function sigma_of_speed(vcoll, T)
     vref = sqrt(8*kB*T/(MASS_BUFFER_GAS*pi))
@@ -536,13 +496,10 @@ end
 """
     segment_hits_triangle(x1, x2, v0, v1, v2)
 
-(hit, t): whether the line SEGMENT from x1 to x2 crosses the triangle
-(v0,v1,v2), and if so, t (the intersection's fractional position along
-x1->x2, in [0,1]) -- the caller needs t to clip the reported position to
-the actual crossing point, not the segment's (possibly far-overshooting,
-see freePath's up-to-1000m sampled step) raw endpoint x2. Standard
-Moller-Trumbore ray-triangle test, t restricted to [0,1] to make it a
-segment test rather than an infinite-ray test.
+(hit, t): whether the segment x1->x2 crosses triangle (v0,v1,v2), and t in
+[0,1], the crossing's fraction along the segment. The caller clips to the
+crossing with t since x2 can overshoot far (freePath steps up to 1000 m).
+Moller-Trumbore with t restricted to [0,1].
 """
 @inline function segment_hits_triangle(x1, x2, v0, v1, v2)
     EPS = 1e-12
@@ -569,13 +526,10 @@ segment test rather than an infinite-ray test.
     return (0.0 <= t <= 1.0, t)
 end
 
-# ---- Spatial acceleration for getCollision(): a real production geometry
-# has thousands of triangles and a particle can take tens of thousands of
-# (typically very short, sub-mm) free-flight steps to thermalize -- a
-# naive per-step scan of every triangle does not scale. This buckets
-# triangles into a uniform 3D grid once at startup; each free-flight
-# segment then only tests triangles whose bucket it (plus a 1-cell margin)
-# overlaps, not the whole mesh. ----
+# ---- Spatial buckets for getCollision(): thousands of triangles and tens of
+# thousands of sub-mm flights per ion make a full scan too slow. Triangles go
+# into a uniform 3D grid at startup; each segment tests only the buckets it
+# overlaps (plus a 1-cell margin). ----
 
 struct TriangleGrid
     xlo::Float64
@@ -707,7 +661,7 @@ function build_field(geomFile, gridFile)
     xlo = minimum(griddf.xlo); xhi = maximum(griddf.xhi)
     ylo = minimum(griddf.ylo); yhi = maximum(griddf.yhi)
     zlo = minimum(griddf.zlo); zhi = maximum(griddf.zhi)
-    max_x_geom = xhi  # kept for output-array-shape parity with the 2D file; unused downstream here
+    max_x_geom = xhi  # same output shape as the 2D file; unused here
 
     DataFrames.select!(griddf, [:xc, :yc, :zc, :u, :v, :w, :T, :nrho])
     grids = Matrix(griddf)
@@ -718,13 +672,8 @@ function build_field(geomFile, gridFile)
     Tmax = maximum(griddf.T)
     Umin = 0.0
     Umax = 1.5*maximum(sqrt.(griddf.u.^2 .+ griddf.v.^2 .+ griddf.w.^2))
-    # A field region with near-uniform temperature or bulk velocity (very
-    # plausible in parts of a mostly-thermalized cell) gives a zero-width
-    # range here, and Tmin:0:Tmax / Umin:0:Umax throws ArgumentError:
-    # range step cannot be zero. Found via a smoke test with intentionally
-    # uniform synthetic data; the same crash is reachable with real data.
-    # A tiny positive floor collapses the lookup table to (correctly) a
-    # single entry for that near-uniform region instead of crashing.
+    # uniform T or bulk velocity gives a zero step and Tmin:0:Tmax throws
+    # ArgumentError; the floor collapses the table to one entry instead
     Tstep = max((Tmax - Tmin) / 20, 1e-6)
     Ustep = max((Umax - Umin) / 20, 1e-6)
     table = generate_lookup_table(Tmin, Tstep, Tmax, Umin, Ustep, Umax)
@@ -732,16 +681,14 @@ function build_field(geomFile, gridFile)
     """
         interpolate!(props, x)
 
-    Nearest-cell-centre lookup in true 3D (x,y,z) -- no axisymmetric
-    rotation assumption, unlike the 2D tracer, because this geometry
-    (off-axis gas inlet) is genuinely not axisymmetric.
+    Nearest-cell-centre lookup in 3D (x,y,z), no axisymmetric rotation.
     """
     @inline function interpolate!(props, x)
         global interps
         interps += 1
         idx = knn(kdtree, [x[1], x[2], x[3]], 1)[1][1]
         interp = view(grids, idx, :)
-        props[1] = interp[1]  # xc (unused downstream, kept for layout parity)
+        props[1] = interp[1]  # xc (unused, same layout as 2D)
         props[2] = interp[2]  # yc
         props[3] = interp[4]  # vgx = u
         props[4] = interp[5]  # vgy = v
@@ -754,30 +701,16 @@ function build_field(geomFile, gridFile)
     """
         getCollision(x1, x2)
 
-    True 3D segment-vs-triangle-mesh test, using the spatial grid to test
-    only nearby triangles rather than the whole mesh. Returns (code, t):
-    (0, 1.0) no collision, (1, t) hit the wall mesh, or (2, t) left the
-    simulation box bounds (read from the grid dump's own cell extents, not
-    hardcoded, so this always matches whatever create_box the SPARTA deck
-    actually used) -- t is the crossing point's fraction along x1->x2, so
-    the caller can clip its reported position to the ACTUAL crossing point
-    rather than x2 itself. x2 can be far beyond either the mesh or the box
-    (freePath's sampled step is capped at 1000m, vastly larger than this
-    ~0.2m domain, whenever local density is low), so reporting x2 as-is
-    for a hit/exit produces nonsensical multi-meter-to-hundreds-of-meter
-    "exit positions" -- confirmed on this case's real geometry (not caught
-    by the synthetic-cube smoke testing this file shipped with): about
-    half of a 20-particle test batch landed 1-289m from a 0.2m box before
-    this fix. When multiple triangles are crossed by one step, the
-    smallest t (the FIRST crossing along the segment) is the physical one.
-    Allocates a small fresh candidate list per call rather than a
-    thread-indexed scratch buffer -- Threads.threadid() is not guaranteed
-    to stay within 1:Threads.nthreads() on every Julia version (newer
-    versions have a separate "interactive" thread pool that threadid()
-    can return IDs from, while nthreads() by default counts only the
-    default pool -- hit exactly this as a BoundsError in local testing on
-    1.13). Correctness across whatever Julia version actually runs this
-    matters more than avoiding one small per-call allocation.
+    Segment vs triangle mesh, testing only triangles in nearby buckets.
+    Returns (code, t): (0, 1.0) no collision, (1, t) hit the wall, (2, t) left
+    the box (bounds from the grid dump's cell extents). t is the crossing's
+    fraction along x1->x2; the caller clips to it because x2 can be far outside
+    (freePath steps up to 1000 m at low density; without clipping, about half
+    of a 20-ion test landed 1-289 m from the 0.2 m box). With several crossings
+    the smallest t is the physical one.
+    The candidate list is allocated per call, not a per-thread buffer:
+    threadid() can exceed nthreads() on newer Julia (interactive pool;
+    BoundsError on 1.13).
     """
     @inline function getCollision(x1, x2)
         best_t = Inf
@@ -812,12 +745,9 @@ end
 """
     propagate(xinit, vin, interp!, getCollision, table, stats=nothing, idx=0)
 
-Identical in structure to ParticleTracing.jl's propagate(), minus the
-harmonic-trap (omega) and spin-flip (pflip) parameters -- there is no
-ion-guide field modeled here (see the handoff doc), so there is nothing
-for a spin flip to be relative to either. Free flight is a straight line;
-propagation uses freePropagate! (plain x += v*t), not the trap-aware
-version.
+Same as ParticleTracing.jl's propagate() without the harmonic trap (omega)
+and spin flip (pflip): no ion-guide field here. Free flight is a straight
+line (freePropagate!, x += v*t).
 """
 @inline function propagate(xinit, vin, interp!, getCollision, table, stats=nothing, idx=0;
                            diag=nothing, hspec=nothing, ms=nothing)
@@ -852,15 +782,10 @@ version.
         end
         coll_code, coll_t = getCollision(x, xnext)
         if coll_code != 0
-            # Clip to the actual crossing point (coll_t fraction along
-            # x->xnext), not the raw sampled endpoint -- see getCollision's
-            # docstring for why xnext itself can be far outside the domain.
-            # Nudged a hair past the exact crossing (1e-9 relative to this
-            # ~0.2m domain is sub-angstrom, physically negligible) so the
-            # caller's own re-classification call on this output position
-            # (line ~824, for --saveexitstats) reliably re-detects it as
-            # outside/on the mesh rather than landing exactly ON a boundary
-            # it came from, where a plain >/< comparison can go either way.
+            # clip to the crossing (coll_t along x->xnext; xnext can be far
+            # outside, see getCollision). The 1e-9 nudge past the crossing
+            # (sub-angstrom) makes the --saveexitstats re-classification see
+            # it as outside instead of exactly on the boundary.
             t_clip = min(1.0, coll_t + 1e-9)
             xnext[1] = x[1] + t_clip * (xnext[1] - x[1])
             xnext[2] = x[2] + t_clip * (xnext[2] - x[2])
@@ -930,10 +855,8 @@ function SimulateParticles(
 
     (; interpolate!, getCollision, table, max_x_geom) = build_field(geomFile, gridFile)
 
-    # Stats binning bounds: x (axial-ish) from the field's own extent;
-    # "radial" (sqrt(y^2+z^2)) bounds derived generously from the field's
-    # y/z spread. See the StatsArray comment above re: this being a
-    # summary projection, not the actual 3D physics.
+    # stats bins: x from the field extent, r = sqrt(y^2+z^2) from the y/z
+    # spread x 1.5 (summary projection only, see StatsArray)
     griddf_bounds = CSV.read(gridFile, DataFrame;
         header=[:id,:xc,:yc,:zc,:xlo,:ylo,:zlo,:xhi,:yhi,:zhi,:nrho,:u,:v,:w,:T],
         skipto=10, ignorerepeated=true, delim=' ')

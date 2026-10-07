@@ -2,27 +2,16 @@
 """Single-panel forward-velocity plot matching Takahashi et al. Fig. 1's
 style: jet colormap, 0-190 m/s color scale, no density/temperature panels.
 
-Filters by the LOCAL VELOCITY VECTOR's own angle from the forward (+x)
-axis, not by cell position -- "full forward" (any cell whose flow is
-forward-or-sideways, angle <= 90 deg) is always shown unrestricted;
---backscatter-deg additionally allows up to that many degrees PAST
-sideways (angle in (90, 90+backscatter_deg]) so genuine backflow/
-backscatter is visible, while cells whose velocity points even further
-backward (usually stray, near-single-particle noise -- see the
-takahashi-case-and-axis-dip / long-run investigation) are hidden.
+Cells are masked by the angle of the local velocity from +x, not by
+position. Angle <= 90 deg is always shown; --backscatter-deg also shows up
+to that many degrees past sideways. Cells pointing further back are mostly
+near-single-particle noise and are hidden.
 
-This angle mask is only applied OUTSIDE the solid flow channel (tube bore
-+ cell bore + aperture throat, using --rb/--rcell/--cell-length/--xexit/
---rap, defaults matching gen_takahashi.py). Cells inside that channel are
-always shown unfiltered -- internal circulation there can legitimately
-point every which way and isn't "backscatter" in the free-jet-expansion
-sense this filter is meant to clean up. Gating on x-position alone (an
-earlier version of this script did that) is wrong: the wide domain used
-for backscatter viewing includes vacuum space OUTSIDE the cell wall at
-x <= xexit (added so wraparound backflow around the plate is visible),
-and gas sitting there IS real backscatter even though its x looks
-"upstream" -- gating by x alone left that whole region unfiltered no
-matter what --backscatter-deg was set to.
+The mask applies only outside the flow channel (tube bore + cell bore +
+aperture throat; --rb/--rcell/--cell-length/--xexit/--rap, defaults as in
+gen_takahashi.py), since circulation inside the cell can point any way.
+Gating on x alone is wrong: the wide domain has vacuum outside the cell wall
+at x <= xexit, and gas there is real backscatter.
 
 Usage: python plot_fig1_style.py RUN_DIR --surf SURF --out OUT.png [--frac F]
 """

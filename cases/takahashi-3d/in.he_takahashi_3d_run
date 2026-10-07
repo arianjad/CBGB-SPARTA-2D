@@ -1,13 +1,9 @@
-# First full-length 3D reproduction attempt of the on-axis Takahashi cell
-# (same geometry/physics as the validated 2D-axisymmetric case, revolved
-# into true 3D -- no axisymmetric ring-averaging trick). Same coarse
-# 2-level mesh as in.he_takahashi_3d_scoping (this is NOT yet the
-# production-resolution mesh -- that comes after this first sanity check).
+# Full-length 3D run of the on-axis Takahashi cell (the validated
+# 2D-axisymmetric case revolved into 3D, no axisymmetric weighting). Same
+# coarse 2-level mesh as in.he_takahashi_3d_scoping, not production resolution.
 #
-# Checkpointed: writes a full SPARTA restart file every CHECKPOINT_STEPS
-# (in addition to the running field.grid dump), so a job killed early
-# (walltime limit, node failure, preemption) does not lose all progress --
-# resume with in.he_takahashi_3d_resume from the latest restart.<step> file.
+# Writes a restart file every CHECKPOINT_STEPS besides the field.grid dump;
+# resume with in.he_takahashi_3d_resume from the latest restart.<step>.
 # Pass MDOT (kg/s), FILLN (m^-3), FNUM, DT (s), STEPS (total), and
 # CHECKPOINT_STEPS with -var.
 variable    SEED index 8675309
