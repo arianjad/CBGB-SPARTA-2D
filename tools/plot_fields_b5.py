@@ -5,7 +5,9 @@ Usage: python tools/plot_fields_b5.py RUN_DIR [OTHER_RUN] --outdir FIGURES
 Uses the dump's bounds, aligns cells by ID, and combines the last --frac of
 nonempty frames. Density is time averaged; velocity and temperature are
 weighted by each frame's density in that cell. --frac 0 selects only the final
-frame. The inlet cap is
+frame. Zero temperature is an unmeasured sentinel, excluded from temperature
+weights. Optional trailing `vol` supplies flow area for regional density means,
+including zero-density open cells. The inlet cap is
 drawn separately. Only zero-density cells are omitted; dilute gas is shown.
 """
 import argparse
@@ -20,16 +22,17 @@ from matplotlib.lines import Line2D
 
 from field_io import FieldFormatError, read_complete_frames, recorded_dt, resolved_dt
 
-NCOL = 11  # id xc yc xlo ylo xhi yhi nrho u v temp
+NCOL = (11, 12)  # optional trailing SPARTA flow area `vol`
 
 
 def read_frames(path, timestep=None, until_step=None, until_ms=None, dt=None):
-    """Return (steps, box, cells) with cells[k] = (Ncell, 11) sorted by id.
+    """Return (steps, box, cells) with cells[k] sorted by id.
 
     Only complete, nonempty frames are eligible. Bounds include their endpoint.
     """
     result = read_complete_frames(path)
-    known_dt = resolved_dt(os.path.dirname(path), dt) if dt is not None else recorded_dt(os.path.dirname(path))
+    known_dt = (resolved_dt(os.path.dirname(path), dt)
+                if dt is not None else recorded_dt(os.path.dirname(path)))
     if until_ms is not None:
         known_dt = resolved_dt(os.path.dirname(path), dt)
         limit = until_ms * 1e-3
@@ -41,10 +44,13 @@ def read_frames(path, timestep=None, until_step=None, until_ms=None, dt=None):
         selected = [f for f in result.frames if until_step is None or f.timestep <= until_step]
     if not selected or selected[0] is None:
         raise FieldFormatError("no complete frame matches the requested selection")
-    if any(frame.data.shape[1] != NCOL for frame in selected):
-        raise FieldFormatError(f"{path}: B5 plotting needs {NCOL}-column grid frames")
+    widths = {frame.data.shape[1] for frame in selected}
+    if len(widths) != 1 or not widths.issubset(NCOL):
+        raise FieldFormatError(f"{path}: B5 plotting needs consistent 11/12-column grid frames")
+    if 12 in widths and any(frame.columns[-1] != "vol" for frame in selected):
+        raise FieldFormatError(f"{path}: 12th grid column must be SPARTA vol")
     keep = [(frame.timestep, frame.data[np.argsort(frame.data[:, 0])])
-            for frame in selected if np.any(frame.data[:, 7:])]
+            for frame in selected if np.any(frame.data[:, 7:11])]
     if not keep:
         raise FieldFormatError(f"{path}: selection contains no populated complete frame")
     box = list(selected[-1].bounds[:2])
@@ -52,36 +58,57 @@ def read_frames(path, timestep=None, until_step=None, until_ms=None, dt=None):
 
 
 def average_tail(path, frac=0.5, timestep=None, until_step=None, until_ms=None, dt=None):
-    """Time-mean density and density-weighted saved flow/T window summaries."""
+    """Mean field over the last `frac` of the non-empty frames."""
     steps, box, frames = read_frames(path, timestep, until_step, until_ms, dt)
     k = max(1, int(round(len(frames) * frac)))
     sel = frames[-k:]
     ids = sel[0][:, 0]
-    for fr in sel[1:]:
+    geom = sel[0][:, 1:7]
+    # Trend uses every eligible frame, not just the averaging tail.
+    for fr in frames:
         if not np.array_equal(fr[:, 0], ids):
             raise SystemExit("grid changed between frames in %s" % path)
-    geom = sel[0][:, 1:7]
-    values = np.stack([fr[:, 7:] for fr in sel])
-    density = values[:, :, 0]
-    nrho = np.mean(density, axis=0)
-    occupied = np.sum(density, axis=0)
-    flow_and_temp = np.divide(
-        np.sum(density[:, :, None] * values[:, :, 1:], axis=0),
-        occupied[:, None],
-        out=np.zeros((len(ids), 3)), where=occupied[:, None] > 0)
+        if not np.all(np.isfinite(fr[:, 1:7])) or not np.array_equal(fr[:, 1:7], geom):
+            raise FieldFormatError(f"{path}: grid geometry changed or is invalid")
+    fields = average_window_fields(sel)
     d = dict(steps=steps[-k:], box=box, ids=ids, xc=geom[:, 0], yc=geom[:, 1],
              xlo=geom[:, 2], ylo=geom[:, 3], xhi=geom[:, 4], yhi=geom[:, 5],
-             nrho=nrho, u=flow_and_temp[:, 0], v=flow_and_temp[:, 1],
-             t=flow_and_temp[:, 2],
-             nframe=len(sel), ntot=len(frames), dt=(resolved_dt(os.path.dirname(path), dt)
-                                                    if dt is not None else recorded_dt(os.path.dirname(path))))
+             nrho=fields[:, 0], u=fields[:, 1], v=fields[:, 2], t=fields[:, 3],
+             nframe=len(sel), ntot=len(frames),
+             dt=(resolved_dt(os.path.dirname(path), dt)
+                 if dt is not None else recorded_dt(os.path.dirname(path))))
+    d["vol"] = sel[0][:, 11] if sel[0].shape[1] == 12 else None
+    if d["vol"] is not None:
+        for fr in frames:
+            if np.any(fr[:, 11] < 0) or not np.all(np.isfinite(fr[:, 11])):
+                raise FieldFormatError(f"{path}: invalid SPARTA vol values")
+            if not np.array_equal(fr[:, 11], d["vol"]):
+                raise FieldFormatError(f"{path}: grid flow area changed between frames")
     # Per-frame body density, so "converged" vs "still filling" is a number
     # rather than an impression.  Frame grids are identical, so reuse the mask.
     m = ((d["xc"] >= 0.010) & (d["xc"] <= 0.055) & (d["yc"] <= 0.017))
-    w = d["yc"][m] * (d["xhi"][m] - d["xlo"][m]) * (d["yhi"][m] - d["ylo"][m])
+    w = d["yc"][m] * (d["vol"][m] if d.get("vol") is not None else
+                       (d["xhi"][m] - d["xlo"][m]) * (d["yhi"][m] - d["ylo"][m]))
     d["trend"] = [(s, float(np.sum(fr[m, 7] * w) / np.sum(w)))
                   for s, fr in zip(steps, frames)]
     return d
+
+
+def average_window_fields(frames):
+    """Time-mean density; density-weighted flow and saved temperature windows."""
+    values = np.stack([fr[:, 7:11] for fr in frames])
+    density = values[:, :, 0]
+    occupied = density.sum(axis=0)
+    out = np.zeros((values.shape[1], 4))
+    out[:, 0] = density.mean(axis=0)
+    np.divide(np.sum(density[:, :, None] * values[:, :, 1:3], axis=0),
+              occupied[:, None], out=out[:, 1:3],
+              where=occupied[:, None] > 0)
+    measured_t = values[:, :, 3] > 0
+    t_weight = np.sum(np.where(measured_t, density, 0.0), axis=0)
+    np.divide(np.sum(np.where(measured_t, density * values[:, :, 3], 0.0), axis=0),
+              t_weight, out=out[:, 3], where=t_weight > 0)
+    return out
 
 
 def surf_by_type(path):
@@ -178,11 +205,17 @@ def radial_profile(d, x0):
     return d["yc"][m][o], d["nrho"][m][o]
 
 
+def open_cells(d):
+    """Use flow area when available; zero density alone is ambiguous."""
+    return d["vol"] > 0 if d.get("vol") is not None else d["nrho"] > 0
+
+
 def region_mean(d, xlo, xhi, rmax, field="nrho"):
     """Volume-weighted mean over an (x, r) box; axisymmetric weight r*dx*dr."""
     m = ((d["xc"] >= xlo) & (d["xc"] <= xhi) & (d["yc"] <= rmax)
-         & (d["nrho"] > 0))
-    w = d["yc"][m] * (d["xhi"][m] - d["xlo"][m]) * (d["yhi"][m] - d["ylo"][m])
+         & open_cells(d) & ((d["nrho"] > 0) | (field == "nrho")))
+    w = d["yc"][m] * (d["vol"][m] if d.get("vol") is not None else
+                       (d["xhi"][m] - d["xlo"][m]) * (d["yhi"][m] - d["ylo"][m]))
     return float(np.sum(d[field][m] * w) / np.sum(w)), int(m.sum())
 
 
