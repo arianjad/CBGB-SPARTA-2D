@@ -6,8 +6,8 @@ Uses the dump's bounds, aligns cells by ID, and combines the last --frac of
 nonempty frames. Density is time averaged; velocity and temperature are
 weighted by each frame's density in that cell. --frac 0 selects only the final
 frame. Zero temperature is an unmeasured sentinel, excluded from temperature
-weights. Optional trailing `vol` supplies flow area for regional density means,
-including zero-density open cells. The inlet cap is
+weights. Optional trailing `vol` (SPARTA's axisymmetric flow volume of
+revolution) weights regional density means, including zero-density open cells. The inlet cap is
 drawn separately. Only zero-density cells are omitted; dilute gas is shown.
 """
 import argparse
@@ -22,7 +22,7 @@ from matplotlib.lines import Line2D
 
 from field_io import FieldFormatError, read_complete_frames, recorded_dt, resolved_dt
 
-NCOL = (11, 12)  # optional trailing SPARTA flow area `vol`
+NCOL = (11, 12)  # optional trailing SPARTA flow volume `vol` (axisymmetric: volume of revolution)
 
 
 def read_frames(path, timestep=None, until_step=None, until_ms=None, dt=None):
@@ -83,12 +83,11 @@ def average_tail(path, frac=0.5, timestep=None, until_step=None, until_ms=None, 
             if np.any(fr[:, 11] < 0) or not np.all(np.isfinite(fr[:, 11])):
                 raise FieldFormatError(f"{path}: invalid SPARTA vol values")
             if not np.array_equal(fr[:, 11], d["vol"]):
-                raise FieldFormatError(f"{path}: grid flow area changed between frames")
+                raise FieldFormatError(f"{path}: grid flow volume changed between frames")
     # Per-frame body density, so "converged" vs "still filling" is a number
     # rather than an impression.  Frame grids are identical, so reuse the mask.
     m = ((d["xc"] >= 0.010) & (d["xc"] <= 0.055) & (d["yc"] <= 0.017))
-    w = d["yc"][m] * (d["vol"][m] if d.get("vol") is not None else
-                       (d["xhi"][m] - d["xlo"][m]) * (d["yhi"][m] - d["ylo"][m]))
+    w = cell_weight(d, m)
     d["trend"] = [(s, float(np.sum(fr[m, 7] * w) / np.sum(w)))
                   for s, fr in zip(steps, frames)]
     return d
@@ -205,17 +204,28 @@ def radial_profile(d, x0):
     return d["yc"][m][o], d["nrho"][m][o]
 
 
+def cell_weight(d, m):
+    """Axisymmetric cell volume weight for cells m.
+
+    SPARTA's axisymmetric `vol` is already the flow volume of revolution,
+    pi (yhi^2 - ylo^2) dx (grid.cpp:312-314; cut cells cut2d.cpp:203-204, 858-859),
+    so it is used as is. Without `vol`, r dx dr is proportional to the same volume.
+    """
+    if d.get("vol") is not None:
+        return d["vol"][m]
+    return d["yc"][m] * (d["xhi"][m] - d["xlo"][m]) * (d["yhi"][m] - d["ylo"][m])
+
+
 def open_cells(d):
-    """Use flow area when available; zero density alone is ambiguous."""
+    """Use flow volume when available; zero density alone is ambiguous."""
     return d["vol"] > 0 if d.get("vol") is not None else d["nrho"] > 0
 
 
 def region_mean(d, xlo, xhi, rmax, field="nrho"):
-    """Volume-weighted mean over an (x, r) box; axisymmetric weight r*dx*dr."""
+    """Volume-weighted mean over an (x, r) box; weights from cell_weight()."""
     m = ((d["xc"] >= xlo) & (d["xc"] <= xhi) & (d["yc"] <= rmax)
          & open_cells(d) & ((d["nrho"] > 0) | (field == "nrho")))
-    w = d["yc"][m] * (d["vol"][m] if d.get("vol") is not None else
-                       (d["xhi"][m] - d["xlo"][m]) * (d["yhi"][m] - d["ylo"][m]))
+    w = cell_weight(d, m)
     return float(np.sum(d[field][m] * w) / np.sum(w)), int(m.sum())
 
 

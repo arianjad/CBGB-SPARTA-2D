@@ -9,6 +9,7 @@ python_cmd=${PYTHON:-python3}
 "$python_cmd" tools/test_tracer_common.py
 "$python_cmd" tools/test_plot_trajectories.py
 "$python_cmd" tools/test_field_io.py
+"$python_cmd" tools/test_field_reader_regressions.py
 bash tools/wsl/test_build_sparta_plain.sh
 bash cases/b5-lean/test_run_lean.sh
 PYTHON="$python_cmd" bash tools/test_standalone.sh

@@ -63,6 +63,19 @@ class ReaderTests(unittest.TestCase):
                       frame(2, [row(2, 20, 10), row(1, 1, 4, 2)]))
         np.testing.assert_allclose([d['nrho'][0], d['u'][0], d['t'][0]], [1, 20, 10])
 
+    def test_axisymmetric_vol_is_volume_of_revolution(self):
+        # SPARTA's axisymmetric vol is pi (yhi^2 - ylo^2) dx (grid.cpp:312-314), so it already carries r.
+        def cell(ident, n, ylo, yhi):
+            vol = np.pi * (yhi ** 2 - ylo ** 2) * .01
+            return [ident, .025, (ylo + yhi) / 2, .02, ylo, .03, yhi, n, 0, 0, 0], vol
+        (a, va), (b, vb) = cell(1, 1., 0., .002), cell(2, 3., .008, .010)
+        self.assertAlmostEqual((1 * va + 3 * vb) / (va + vb), 2.8)  # radii 1 : 9 -> (1 + 27) / 10
+        with_vol = self.read(frame(1, [a + [va], b + [vb]], ' vol'))
+        self.assertAlmostEqual(p.region_mean(with_vol, .01, .055, .017)[0], 2.8)
+        self.assertAlmostEqual(with_vol['trend'][0][1], 2.8)
+        without = self.read(frame(1, [a, b]))
+        self.assertAlmostEqual(p.region_mean(without, .01, .055, .017)[0], 2.8)
+
     def test_flow_area_and_zero_density_region(self):
         rows = [row(0, 0, 0) + [.0001], row(2, 20, 10, 2) + [.0001]]
         d = self.read(frame(1, rows, ' vol'))
